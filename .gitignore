@@ -8,7 +8,7 @@ CMakePresets.json
 /pimoroni-pico/
 # Prerequisites
 *.d
-
+releases*/
 # Compiled Object files
 *.slo
 *.lo
