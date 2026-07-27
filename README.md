@@ -820,7 +820,7 @@ I personally recommend [PCBWay](https://www.pcbway.com/). The boards i ordered f
 
 [![Image](assets/pcbw.png)](https://www.pcbway.com/)
 
-When ordering, simply upload the zip file containing the gerber design.  This file (pico_nesPCB_v2.1.zip) is available in the [releases page](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest) and can also be found in the [PCB](PCB/) folder. 
+When ordering, simply upload the zip file containing the gerber design.  This file (pico_nesPCB_v2.3.zip) is available in the [releases page](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest) and can also be found in the [pico_shared/PCB](pico_shared/PCB/) folder. 
 
 > [!NOTE]
 >  Soldering skills are required. Make sure you solder all the connections from the Pico onto the PCB. Also the connections on the short right-side of the Pico. (For ground)
