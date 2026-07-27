@@ -812,7 +812,8 @@ Create your own Pico-based NES console. It features two NES controller ports for
 
 Designed by [@johnedgarpark](https://twitter.com/johnedgarpark)
 
-![IMG_6011](https://github.com/user-attachments/assets/a55dd2ad-75a8-4115-a38f-fe0ecd6f51c7)
+<img width="4284" height="5712" alt="IMG_1551" src="https://github.com/user-attachments/assets/c26edd6f-1407-4f7e-869f-abd8ffe5bae8" />
+
 
 Several Companies  can make these PCBs for you. 
 
