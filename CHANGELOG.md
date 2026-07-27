@@ -1,6 +1,6 @@
 # CHANGELOG
 
-VRC7 FM audio for Lagrange Point, a new overclock setting, a controller test screen, more reliable HDMI audio, support for the new pico-bootLoader bootloader.
+VRC7 FM audio for Lagrange Point, a new overclock setting, a controller test screen, more reliable HDMI audio, support for the new pico-bootLoader bootloader. Updated PCB design for Pico/Pico2 and Pimoroni Pico Plus 2
 
 
 # General Info

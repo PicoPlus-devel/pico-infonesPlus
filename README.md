@@ -73,7 +73,7 @@ Click on image below to see a demo video.
 
 You can use it with these RP2040/RP2350 boards and configurations:
     
-  - A custom printed circuit board (PCB) designed by [@johnedgarpark](https://twitter.com/johnedgarpark). (requires soldering) Up to two NES controller ports can be added to this PCB. Can also be used with a USB gamecontroller. You can 3d print your own NES-like case for the PCB. The Pimoroni Pico Plus 2 is not suitable for this PCB because of the SP/CE connector on back of the board
+  - A custom printed circuit board (PCB) designed by [@johnedgarpark](https://twitter.com/johnedgarpark). (requires soldering) Up to two NES controller ports can be added to this PCB. Can also be used with a USB gamecontroller. You can 3d print your own NES-like case for the PCB. The current design (v2.3) has through-holes, so besides a Raspberry Pi Pico or Pico 2 you can also use a Pimoroni Pico Plus 2, as long as it has soldered male headers.
     
   - An additional PCB design for Waveshare RP2040 & RP2350 Zero including case design by DynaMight1124 based around cheaper but harder to solder components for those that fancy a bigger challenge. It also allows the design to be smaller.
 
@@ -97,7 +97,7 @@ You can use it with these RP2040/RP2350 boards and configurations:
 
 - [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107)
 
-  Use the breadboard config as mentioned above. Works also on the discontinued Pimoroni Pico DV Demo base. This board does not fit the PCB because of the SP/CE connector on back of the board.
+  Use the breadboard config as mentioned above. Works also on the discontinued Pimoroni Pico DV Demo base. Since PCB design v2.3 this board also fits the [custom PCB](#pcb-with-raspberry-pi-pico-or-pico-2), provided male headers are soldered onto it.
   The PSRAM on the board is used in stead of flash to load the roms from SD.
 
 - [Adafruit Fruit Jam](https://www.adafruit.com/product/6200)
@@ -820,7 +820,10 @@ I personally recommend [PCBWay](https://www.pcbway.com/). The boards i ordered f
 
 [![Image](assets/pcbw.png)](https://www.pcbway.com/)
 
-When ordering, simply upload the zip file containing the gerber design.  This file (pico_nesPCB_v2.3.zip) is available in the [releases page](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest) and can also be found in the [pico_shared/PCB](pico_shared/PCB/) folder. 
+When ordering, simply upload the zip file containing the gerber design.  This file (pico_nesPCB_v2.3.zip) is available in the [releases page](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest) and can also be found in the [PCB folder of the pico_shared repository](https://github.com/fhoedemakers/pico_shared/tree/main/PCB). 
+
+> [!NOTE]
+> Design v2.3 adds through-holes for the Pico. You can either solder the board flat onto the PCB as before, or plug in a Raspberry Pi Pico, Pico 2 or [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) fitted with male headers. Designs up to and including v2.1 have no through-holes and require the board to be soldered flat.
 
 > [!NOTE]
 >  Soldering skills are required. Make sure you solder all the connections from the Pico onto the PCB. Also the connections on the short right-side of the Pico. (For ground)
@@ -833,7 +836,9 @@ When ordering, simply upload the zip file containing the gerber design.  This fi
 
 Other materials needed:
 
-- Raspberry Pi Pico or Pico 2 **with no headers**.
+- One of the following, depending on how you want to mount it onto the PCB:
+  * Raspberry Pi Pico or Pico 2 **with no headers**, soldered flat onto the PCB. Works with every design version.
+  * Raspberry Pi Pico, Pico 2 or [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) **with soldered male headers**, plugged into the through-holes. Requires design v2.3 or later, see the note above. You can use [these headers](https://a.co/d/dSNPuyo).
 - [Adafruit DVI Breakout Board - For HDMI Source Devices](https://www.adafruit.com/product/4984)
 - [Adafruit Micro SD SPI or SDIO Card Breakout Board - 3V ONLY!](https://www.adafruit.com/product/4682)
 - For the NES Controllers:
@@ -847,7 +852,7 @@ When using a Pico / Pico W, Flash **[piconesPlus_AdafruitDVISD_pico_arm.uf2](htt
 When using a Pico 2 or Pico 2 W, flash **[piconesPlus_AdafruitDVISD_pico2_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_arm.uf2)** / **[piconesPlus_AdafruitDVISD_pico2_w_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_w_arm.uf2)** instead.
 
 > [!IMPORTANT]
-> You cannot use a [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) because of the SP/CE connector on the back of the board.
+> A [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) can only be used with design v2.3 or later, and only when male headers are soldered onto it. On v2.1 and older designs the board has to lie flat on the PCB, which the SP/CE connector on the back of the Pico Plus 2 prevents.
 
 ### Image: Two player setup using two NES controllers or a USB controller and a NES controller
 
@@ -887,7 +892,7 @@ I personally recommend [PCBWay](https://www.pcbway.com/). The boards I ordered f
 
 [![Image](assets/pcbw.png)](https://www.pcbway.com/)
 
-When ordering, simply upload the zip file containing the gerber design.  This file (Gerber_PicoNES_Mini_PCB_v2.0.zip) is available in the [releases page](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest) and can also be found in the [PCB](PCB/) folder. 
+When ordering, simply upload the zip file containing the gerber design.  This file (Gerber_PicoNES_Mini_PCB_v2.0.zip) is available in the [releases page](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest) and can also be found in the [PCB folder of the pico_shared repository](https://github.com/fhoedemakers/pico_shared/tree/main/PCB). 
 
 > [!NOTE]
 >  Soldering skills are required. Make sure you solder all the connections from the Pico onto the PCB. This version requires good soldering skills especially for the HDMI portion, a good amount of flux and a fine tip will be required, additional solder can be wicked away with solder wick. I recommend starting with the resistor arrays first, then the HDMI port, after that either Pico or MicroSD adaptor, lastly the NES Ports, which can be hard to push into the PCB.
