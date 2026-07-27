@@ -230,7 +230,7 @@ Click on the link below for your specific board configuration:
   * [3D printed case for this board](#3d-printed-case-for-rp2040rp2350-pizero)
 - [Waveshare RP2350-PiZero Development Board](#waveshare-rp2040rp2350-pizero-development-board)
   * [3D printed case for this board](#3d-printed-case-for-rp2040rp2350-pizero)
-- [Printed Circuit Board (PCB) for Raspberry Pi Pico or Pico 2](#pcb-with-raspberry-pi-pico-or-pico-2)
+- [Printed Circuit Board (PCB) for Raspberry Pi Pico, Pico 2 or Pimoroni Pico Plus 2](#pcb-with-raspberry-pi-pico-or-pico-2)
   * [3D printed case for this PCB](#3d-printed-case-for-pcb)
 - [PCB with WaveShare RP2040/RP2350 Zero](#pcb-with-waveshare-rp2040rp2350-zero)
   * [3D printed case for this PCB](#3d-printed-case)
@@ -851,6 +851,7 @@ Other materials needed:
 
 When using a Pico / Pico W, Flash **[piconesPlus_AdafruitDVISD_pico_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico_arm.uf2)** / **[piconesPlus_AdafruitDVISD_pico_w_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico_w_arm.uf2)** from the [releases page](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest). 
 When using a Pico 2 or Pico 2 W, flash **[piconesPlus_AdafruitDVISD_pico2_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_arm.uf2)** / **[piconesPlus_AdafruitDVISD_pico2_w_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_w_arm.uf2)** instead.
+When using a Pimoroni Pico Plus 2, flash **[piconesPlus_AdafruitDVISD_pico2_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_arm.uf2)** as well. The PSRAM on the board is used instead of flash to load the roms from SD.
 
 > [!IMPORTANT]
 > A [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) can only be used with design v2.3 or later, and only when male headers are soldered onto it. On v2.1 and older designs the board has to lie flat on the PCB, which the SP/CE connector on the back of the Pico Plus 2 prevents.

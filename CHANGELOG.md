@@ -1,6 +1,6 @@
 # CHANGELOG
 
-VRC7 FM audio for Lagrange Point, a new overclock setting, a controller test screen, more reliable HDMI audio, support for the new pico-bootLoader bootloader. Updated PCB design for Pico/Pico2 and Pimoroni Pico Plus 2
+VRC7 FM audio for Lagrange Point, a new overclock setting, a controller test screen, more reliable HDMI audio, support for the new pico-bootLoader bootloader. Updated PCB design for Pico/Pico2, now also usable with a Pimoroni Pico Plus 2.
 
 
 # General Info
@@ -36,7 +36,7 @@ VRC7 FM audio for Lagrange Point, a new overclock setting, a controller test scr
 
 ## PCB
 
-Updated PCB **pico_nesPCB_v2.3.zip** includes through-holes, allowing a Raspberry Pi Pico, Pico 2, or [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) **with pin headers** installed to be used.
+Updated PCB **pico_nesPCB_v2.3.zip** includes through-holes, allowing a Raspberry Pi Pico, Pico 2, or [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) **with pin headers** installed to be used. Soldering a headerless Pico or Pico 2 flat onto the board works as before. Earlier designs had no through-holes, which is why the Pico Plus 2 could not be used: its SP/CE connector on the back is in the way when the board lies flat.
 
 ## pico-bootLoader
 
@@ -169,7 +169,7 @@ For some configurations risc-v binaries are available. It is recommended however
 | Pimoroni Pico Plus 2 | [piconesPlus_AdafruitDVISD_pico2_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_arm.uf2) | [Readme](README.md#raspberry-pi-pico-or-pico-2-setup-with-adafruit-hardware-and-breadboard) |
 
 
-### PCB Pico/Pico2
+### PCB Pico/Pico2 and Pimoroni Pico Plus 2
 
 | Board | Binary | Readme |
 |:--|:--|:--|
@@ -177,6 +177,7 @@ For some configurations risc-v binaries are available. It is recommended however
 | Pico W| [piconesPlus_AdafruitDVISD_pico_w_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico_w_arm.uf2) | [Readme](README.md#pcb-with-raspberry-pi-pico-or-pico-2) |
 | Pico 2 | [piconesPlus_AdafruitDVISD_pico2_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_arm.uf2) | [Readme](README.md#pcb-with-raspberry-pi-pico-or-pico-2) |
 | Pico 2 W | [piconesPlus_AdafruitDVISD_pico2_w_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_w_arm.uf2) | [Readme](README.md#pcb-with-raspberry-pi-pico-or-pico-2) |
+| Pimoroni Pico Plus 2 (PCB v2.3 and up, headers required) | [piconesPlus_AdafruitDVISD_pico2_arm.uf2](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/piconesPlus_AdafruitDVISD_pico2_arm.uf2) | [Readme](README.md#pcb-with-raspberry-pi-pico-or-pico-2) |
 
 PCB [pico_nesPCB_v2.3.zip](https://github.com/fhoedemakers/pico-infonesPlus/releases/latest/download/pico_nesPCB_v2.3.zip)
 
