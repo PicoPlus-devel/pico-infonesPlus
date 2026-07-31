@@ -858,6 +858,7 @@ When ordering, simply upload the zip file containing the gerber design.  This fi
 
 > [!NOTE]
 > Design v2.3 adds through-holes for the Pico. You can either solder the board flat onto the PCB as before, or plug in a Raspberry Pi Pico, Pico 2 or [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) fitted with male headers. Designs up to and including v2.1 have no through-holes and require the board to be soldered flat.
+> When you mount the Pico with headers, make sure to print the latest top cover from Thingiverse, see [3D printed case for PCB](#3d-printed-case-for-pcb).
 
 > [!NOTE]
 >  Soldering skills are required. Make sure you solder all the connections from the Pico onto the PCB. Also the connections on the short right-side of the Pico. (For ground)
@@ -901,6 +902,9 @@ Choose either of the following:
 ### 3D printed case for PCB
 
 Gavin Knight ([DynaMight1124](https://github.com/DynaMight1124)) designed a NES-like case you can 3D print as an enclosure for this PCB.  You can find it here: [https://www.thingiverse.com/thing:6689537](https://www.thingiverse.com/thing:6689537). Here you can find two designs: the latest design for PCB v2.0  and the previous design for [PCB v0.2](PCB/v0.2). In the latest v2.0 design, you can choose between two top covers, one with a button connecting to the bootsel button for easy firmware upgrades, the other without the button. In this case you have to remove the top cover to access the bootsel button. See images below. Make sure to print the correct files for the PCB version you own. You can find more information on Gavin's Thingiverse page.
+
+> [!IMPORTANT]
+> When the Pico is plugged into the through-holes of PCB v2.3 with male headers, always download the **latest** top case design from Thingiverse. Because the Pico sits higher on the board when headers are used, only the newest top cover leaves enough room for the USB cable to fit. The older covers were designed for a Pico soldered flat onto the PCB.
 
 #### Top Cover v2.0 without button (Top_v2.0.stl)
 ![Top cover without button](https://github.com/user-attachments/assets/c6205db3-580e-41e9-83e4-66c9534c6519)
