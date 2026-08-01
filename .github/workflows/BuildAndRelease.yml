@@ -103,7 +103,7 @@ jobs:
             with:
               files: |
                 releases/*.uf2
-                pico_shared/PCB/pico_nesPCB_v2.3.zip
+                pico_shared/PCB/pico_nesPCB_v2.1.zip
                 pico_shared/PCB/Gerber_PicoNES_Mini_PCB_v2.0.zip
                 pico_shared/PCB/Gerber_PicoNES_Micro_v1.2.zip
                 releases/PicoNesMetadata.zip
