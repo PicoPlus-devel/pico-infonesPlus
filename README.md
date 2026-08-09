@@ -75,11 +75,11 @@ Click on image below to see a demo video.
 
 You can use it with these RP2040/RP2350 boards and configurations:
     
-  - A custom printed circuit board (PCB) designed by [@johnedgarpark](https://twitter.com/johnedgarpark). (requires soldering) Up to two NES controller ports can be added to this PCB. Can also be used with a USB game controller. You can 3D print your own NES-like case for the PCB. The current design (v2.6) has through-holes, so besides a Raspberry Pi Pico or Pico 2 you can also use a Pimoroni Pico Plus 2, as long as it has soldered male headers.
+  - [A custom printed circuit board (PCB)](#pcb-with-raspberry-pi-pico-or-pico-2-and-pimoroni-pico-plus-2) designed by [@johnedgarpark](https://twitter.com/johnedgarpark). (requires soldering) Up to two NES controller ports can be added to this PCB. Can also be used with a USB game controller. You can 3D print your own NES-like case for the PCB. The current design (v2.6) has through-holes, so besides a Raspberry Pi Pico or Pico 2 you can also use a Pimoroni Pico Plus 2, as long as it has soldered male headers.
     
-  - An additional PCB design for Waveshare RP2040 & RP2350 Zero including case design by DynaMight1124 based around cheaper but harder to solder components for those that fancy a bigger challenge. It also allows the design to be smaller.
+  - [An additional PCB design for Waveshare RP2040 & RP2350 Zero including case design by DynaMight1124](#pcb-with-waveshare-rp2040rp2350-zero) based around cheaper but harder to solder components for those that fancy a bigger challenge. It also allows the design to be smaller.
 
-  - A further PCB design has also been created for the new Waveshare RP2350 USB A board, this allows a very small PicoNES console to be made using USB control pads only. By far the most challenging to solder, if that's your thing!
+  - [A further PCB design has also been created for the new Waveshare RP2350 USB A board](#pcb-with-waveshare-rp2350-usb-a), this allows a very small PicoNES console to be made using USB control pads only. By far the most challenging to solder, if that's your thing!
  
 - [Adafruit Feather RP2040 with DVI](https://www.adafruit.com/product/5710) (HDMI) Output Port. For use with a USB game controller, up to two legacy NES controllers, or even a Wii Classic controller. Requires these add-ons:
   - Breadboard
