@@ -348,7 +348,28 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
     // static int rapidFireCounter = 0;
 
     ++rapidFireCounter;
-   
+
+#if NES_PIN_CLK != -1
+    // Buttons of a GPIO pad in NES order. A NES pad shifts them out that way
+    // already; a SNES pad puts its B and Y in the A and B slots, so its face
+    // buttons are named instead of taken positionally: physical A drives NES A
+    // and physical B drives NES B, the same as on USB and Wii Classic pads, and
+    // the same buttons the menu uses to choose and go back. X, Y, L and R have
+    // no NES equivalent and are ignored there too.
+    auto nespadGameBits = [](int padnum) -> int
+    {
+        if (nespad_padtype[padnum] != NESPAD_TYPE_SNES)
+        {
+            return nespad_states[padnum];
+        }
+        const uint16_t ext = nespad_states_ext[padnum];
+        int v = ext & (SELECT | START | UP | DOWN | LEFT | RIGHT); // same bits on both pads
+        if (ext & (1u << 8)) v |= A;
+        if (ext & (1u << 0)) v |= B;
+        return v;
+    };
+#endif
+
     bool usbConnected = false;
     for (int i = 0; i < 2; ++i)
     {
@@ -373,12 +394,12 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
         {
             if (i == 1)
             {
-                v = v | nespad_states[1] | nespad_states[0];
+                v = v | nespadGameBits(1) | nespadGameBits(0);
             }
         }
         else
         {
-            v |= nespad_states[i];
+            v |= nespadGameBits(i);
         }
 #endif
 
