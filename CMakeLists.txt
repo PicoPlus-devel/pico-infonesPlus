@@ -56,10 +56,11 @@ include("pico_shared/BoardConfigs.cmake")
 # ---------------------------------------------------------------------------
 # NES Zapper (light gun) on NES controller port 2.
 #
-# Custom PCB design v2.1 and later route port 2 pin D3 -> GPIO28 (light sensor)
-# and pin D4 -> GPIO27 (trigger); see pico_shared/PCB/README.md. That is
-# HW_CONFIG 2 (Adafruit DVI + SD breakout / custom PCB), the only supported
-# configuration. Every other HW_CONFIG gets -1 ("not present"), which compiles
+# Custom PCB design v2.1 and later route port 2 pin D3 -> GPIO27 (light sensor)
+# and pin D4 -> GPIO28 (trigger). Beware the v2.1 silkscreen, which labels these
+# two pads the wrong way round; the routing is the same on v2.1 and v2.6 and
+# needs no firmware difference. That is HW_CONFIG 2 (Adafruit DVI + SD breakout
+# / custom PCB), the only supported configuration. Every other HW_CONFIG gets -1 ("not present"), which compiles
 # the feature out entirely -- on most of them GPIO 27/28 are already taken by
 # I2S clock pins, NES port 2, DVI/TMDS pairs or the PIO USB DP pin.
 #
@@ -76,8 +77,8 @@ include("pico_shared/BoardConfigs.cmake")
 # create a cache entry, so DEFINED sees it and the override still wins.
 if(NOT DEFINED ZAPPER_D3 AND NOT DEFINED ZAPPER_D4)
     if(HW_CONFIG EQUAL 2 AND "${USE_I2S_AUDIO}" STREQUAL "0")
-        set(ZAPPER_D3 28)
-        set(ZAPPER_D4 27)
+        set(ZAPPER_D3 27) # light sensor
+        set(ZAPPER_D4 28) # trigger
     else()
         # I2S audio on HW_CONFIG 2 claims GPIO 26 (data) and 27/28 (clock base
         # pair), so the Zapper pins have to give way if it is ever enabled there.
@@ -87,8 +88,8 @@ if(NOT DEFINED ZAPPER_D3 AND NOT DEFINED ZAPPER_D4)
 endif()
 
 # Line polarity, see zapper.h. The light line arrives inverted with respect to
-# the value the NES puts on the bus: measured on the PCB with a Tomee Zapp Gun,
-# GPIO28 reads low while the sensor is covered and high while it sees light,
+# the value the NES puts on the bus: measured with a Tomee Zapp Gun, the light
+# pin reads low while the sensor is covered and high while it sees light,
 # whereas $4017 bit 3 is defined as 0 = light detected. The NES inverts this line
 # between the connector and the CPU; a direct GPIO wire does not, so it has to be
 # inverted in software. The trigger line needs no such correction.

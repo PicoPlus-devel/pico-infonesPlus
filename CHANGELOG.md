@@ -30,7 +30,9 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 
 Beta support for the **NES Zapper** (light gun) in NES controller **port 2**.
 
-This requires the custom PCB: design **v2.1 and later** (so also the current v2.6) route port 2's D3 line to GPIO28 (light sensor) and its D4 line to GPIO27 (trigger), and the emulator now reads those two lines into bits 3 and 4 of `$4017`, the way a real NES does. Only the **piconesPlus_AdafruitDVISD_*** binaries carry the feature; on every other supported board GPIO27 and GPIO28 are already used for something else (I2S clock pins, NES port 2, DVI/TMDS pairs, the PIO USB DP pin), so it is compiled out there.
+This requires the custom PCB: design **v2.1 and later** (so also the current v2.6) route port 2's D3 line to GPIO27 (light sensor) and its D4 line to GPIO28 (trigger), and the emulator now reads those two lines into bits 3 and 4 of `$4017`, the way a real NES does. Only the **piconesPlus_AdafruitDVISD_*** binaries carry the feature; on every other supported board GPIO27 and GPIO28 are already used for something else (I2S clock pins, NES port 2, DVI/TMDS pairs, the PIO USB DP pin), so it is compiled out there.
+
+The Zapper **cannot be used on the Murmulator M1 and M2 boards**. Those PCBs leave D3 and D4 of the controller ports unconnected, so the gun's light and trigger lines never reach the board at all. This cannot be fixed in firmware.
 
 There is no setting to switch on. The gun is detected automatically when plugged in, since a Zapper holds its trigger line low while the trigger is released. A regular NES or SNES controller in port 2 keeps working alongside it - the pad's own data line in bit 0 is left untouched and only bits 3 and 4 come from the gun.
 

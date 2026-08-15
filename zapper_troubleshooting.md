@@ -2,8 +2,22 @@
 
 Background for the [NES Zapper (light gun)](README.md#nes-zapper-light-gun) section of the readme.
 Everything here concerns the custom PCB (HW_CONFIG 2), which is the only configuration where
-the Zapper lines are wired to the Pico: NES controller port 2 pin **D3 -> GPIO28** (light sensor)
-and pin **D4 -> GPIO27** (trigger).
+the Zapper lines are wired to the Pico: NES controller port 2 pin **D3 -> GPIO27** (light sensor)
+and pin **D4 -> GPIO28** (trigger).
+
+If you wire this yourself on a breadboard, match that mapping or build with
+`-DZAPPER_D3=` / `-DZAPPER_D4=` set to whatever you actually wired.
+
+> [!NOTE]
+> On PCB design **v2.1 the silkscreen labels for these two pads are the wrong way
+> round** - what is printed as D3 is the physical D4 line and vice versa. The
+> routing itself is correct, so a controller port soldered into the footprint
+> works on both v2.1 and v2.6 with no firmware change; only the printing on the
+> board is misleading. v2.6 corrects the labels.
+
+The Zapper is not available on any other board. On most of them GPIO27 and GPIO28 are
+already used for something else, and the **Murmulator M1 and M2** PCBs leave D3 and D4 of the
+controller ports unconnected, so the gun's lines never reach the board at all.
 
 Most of this only matters if the gun misbehaves. For normal use, the readme is enough.
 
@@ -29,9 +43,9 @@ The trigger is a plain switch and will usually still register on an unmodified o
 | ------- | --------------- |
 | Trigger responds, shots always miss | First check the gun is a suitable one (see above) - this is what an unmodified original Zapper does. Otherwise recalibrate, and if that fails the gun may not be seeing the screen: dim the room, move closer, or raise the TV brightness. |
 | Every shot hits, wherever you aim | The emulator is telling the game "light detected" all the time. The usual cause is the light line polarity: cover the sensor with your hand and check with `-DZAPPER_DEBUG=1` that `dark` counts up rather than `lit`. If it is the wrong way round, flip `-DZAPPER_INVERT_D3`. Otherwise make sure nothing is drawn on screen (see the note on `ZAPPER_DEBUG` below), and lower the TV brightness/backlight. |
-| Shots fire on their own while merely pointing at the screen, and real trigger pulls do nothing | **D3 and D4 are swapped.** The light line is being read as the trigger, so a bright picture fires a shot, and the trigger is being read as light. Aiming at the menu makes it flash and step through the options by itself. Check that port 2 D3 goes to GPIO28 and D4 to GPIO27. Note the idle state looks identical either way round, so the gun is still detected at boot and nothing warns you. |
+| Shots fire on their own while merely pointing at the screen, and real trigger pulls do nothing | **D3 and D4 are swapped.** The light line is being read as the trigger, so a bright picture fires a shot, and the trigger is being read as light. Aiming at the menu makes it flash and step through the options by itself. Check that port 2 D3 goes to GPIO27 and D4 to GPIO28, or build with `-DZAPPER_D3=` / `-DZAPPER_D4=` matching your wiring. Note the idle state looks identical either way round, so the gun is still detected at boot and nothing warns you. |
 | Calibration never settles | Try the delay by hand instead of the automatic mode. Note that this emulator does not display the top and bottom 4 scanlines, so a calibration target right at the very top edge of the picture may not be visible to the gun. |
-| Nothing responds at all | Build from source with `-DZAPPER_DEBUG=1` and watch the UART: `zapper.cpp` then reports the raw GPIO28/GPIO27 levels and how the game is reading them. With the gun idle and the sensor covered, expect both lines low; pulling the trigger raises GPIO27 for about 100 ms, and aiming at a bright white area raises GPIO28. If the levels are the other way round, flip `-DZAPPER_INVERT_D3` / `-DZAPPER_INVERT_D4`. |
+| Nothing responds at all | Build from source with `-DZAPPER_DEBUG=1` and watch the UART: `zapper.cpp` then reports the raw levels of both pins and how the game is reading them, as `D<light><trigger>`. With the gun idle and the sensor covered, expect both low; pulling the trigger raises the trigger pin for about 100 ms, and aiming at a bright white area raises the light pin. If the levels are the other way round, flip `-DZAPPER_INVERT_D3` / `-DZAPPER_INVERT_D4`. |
 
 ## Line polarity
 
@@ -48,7 +62,7 @@ All of these are off by default and only apply to builds made from source.
 
 | Option | Effect |
 | ------ | ------ |
-| `-DZAPPER_D3=` / `-DZAPPER_D4=` | GPIO pins for the light and trigger lines. Default 28 and 27 on HW_CONFIG 2, `-1` (feature compiled out) elsewhere. |
+| `-DZAPPER_D3=` / `-DZAPPER_D4=` | GPIO pins for the light and trigger lines. Default 27 and 28 on HW_CONFIG 2, `-1` (feature compiled out) elsewhere. |
 | `-DZAPPER_INVERT_D3=` / `-DZAPPER_INVERT_D4=` | Line polarity. Default 1 and 0, see above. |
 | `-DZAPPER_DEBUG=` | Diagnostics bit mask: `1` UART trace, `2` on-screen readout, `3` both. |
 | `-DZAPPER_MEASURE=1` | Display-lag measurement mode. Replaces the picture with a flash pattern, so it is an instrument, not a play mode. |

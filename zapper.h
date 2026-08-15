@@ -6,8 +6,8 @@
 /*
  * Wiring (custom PCB design v2.1 and later, HW_CONFIG 2):
  *
- *   port 2 pin D3 -> ZAPPER_D3 (GPIO28)   light sensor
- *   port 2 pin D4 -> ZAPPER_D4 (GPIO27)   trigger
+ *   port 2 pin D3 -> ZAPPER_D3 (GPIO27)   light sensor
+ *   port 2 pin D4 -> ZAPPER_D4 (GPIO28)   trigger
  *
  * $4016/$4017 read layout (https://www.nesdev.org/wiki/Zapper):
  *
@@ -66,12 +66,12 @@
 
 /* Line polarity.
    The light line needs inverting on this hardware and the trigger line does not.
-   Measured on the PCB with a Tomee Zapp Gun: GPIO28 reads low while the sensor
-   is covered and high while it sees light, while $4017 bit 3 is defined the other
+   Measured with a Tomee Zapp Gun: the light pin reads low while the sensor is
+   covered and high while it sees light, while $4017 bit 3 is defined the other
    way round (0 = light detected). The NES inverts the light line between the
    connector and the CPU bus, so the spec describes the bus value, not the pin; a
-   direct GPIO wire sees the raw sense. GPIO27 already matches the bus definition
-   (high while the trigger is half-pulled), so it is passed straight through.
+   direct GPIO wire sees the raw sense. The trigger pin already matches the bus
+   definition (high while half-pulled), so it is passed straight through.
    CMakeLists.txt sets the defaults per board; override with
    -DZAPPER_INVERT_D3=0 / -DZAPPER_INVERT_D4=1 for a gun that differs. */
 #ifndef ZAPPER_INVERT_D3

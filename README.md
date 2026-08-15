@@ -151,7 +151,7 @@ For more info, see [pio_usb.md](pio_usb.md).
 - One or optionally two original NES controllers for two player games.  In some configurations, soldering is required.
 - Original SNES controllers can be connected to the NES controller port(s) as well. The emulator detects automatically whether an NES or a SNES controller is attached, so no configuration is needed.
 - Wii Classic controller: Adafruit Feather RP2040, WaveShare RP2040 Pi-Zero, Adafruit Metro RP2350, Adafruit Fruit Jam boards only
-- NES Zapper (light gun): [custom PCB](#nes-zapper-light-gun) design v2.1 or later only, in controller port 2. Not available on the other configurations - GPIO27 and GPIO28 are already in use there. Needs LCD-lag-corrected ROM patches **and** a third-party gun such as the Tomee Zapp Gun; an original Nintendo Zapper does not work on a flat panel without a hardware modification. See the [NES Zapper](#nes-zapper-light-gun) section.
+- NES Zapper (light gun): [custom PCB](#nes-zapper-light-gun) design v2.1 or later only, in controller port 2. Not available on the other configurations - GPIO27 and GPIO28 are already in use there, and the Murmulator M1/M2 boards leave the controller ports' D3 and D4 unconnected altogether. Needs LCD-lag-corrected ROM patches **and** a third-party gun such as the Tomee Zapp Gun; an original Nintendo Zapper does not work on a flat panel without a hardware modification. See the [NES Zapper](#nes-zapper-light-gun) section.
       
 Parts list for legacy controllers
   * NES or SNES controller. A second controller port and controller is optional and only needed if you want to play two player games using legacy controllers. Two player games can also be played with a USB controller and a legacy controller.
@@ -907,9 +907,12 @@ Choose either of the following:
 > [!NOTE]
 > Beta. Works on the **PCB only**, in **controller port 2**, and needs a **third-party light gun** such as the Tomee Zapp Gun - an original Nintendo Zapper will not work on a flat panel unmodified. See [Which gun you need](#which-gun-you-need) below.
 
-PCB design **v2.1 and later** (so also the current v2.6) route the two extra data lines of NES controller port 2 to the Pico: **D3 → GPIO28** (light sensor) and **D4 → GPIO27** (trigger). The emulator reads those two lines directly into bits 3 and 4 of `$4017`, exactly as a real NES does. Flash one of the **piconesPlus_AdafruitDVISD_*** binaries (the PCB firmware); on all other boards GPIO27 and GPIO28 are already in use for something else, so Zapper support is not compiled in there.
+PCB design **v2.1 and later** (so also the current v2.6) route the two extra data lines of NES controller port 2 to the Pico: **D3 → GPIO27** (light sensor) and **D4 → GPIO28** (trigger). The emulator reads those two lines directly into bits 3 and 4 of `$4017`, exactly as a real NES does. Flash one of the **piconesPlus_AdafruitDVISD_*** binaries (the PCB firmware); on all other boards GPIO27 and GPIO28 are already in use for something else, so Zapper support is not compiled in there.
 
 No setting has to be enabled. The gun is detected automatically the moment it is plugged in, because a Zapper actively drives its trigger line low while the trigger is released. A regular NES or SNES controller can stay in port 2 alongside the gun and keeps working - only bits 3 and 4 of `$4017` come from the Zapper, the pad's own data line is untouched.
+
+> [!NOTE]
+> The Zapper **cannot be used on the Murmulator M1 and M2 boards**. Those PCBs leave D3 and D4 of the controller ports unconnected, so the gun's light and trigger lines never reach the board at all. This cannot be fixed in firmware.
 
 #### Which gun you need
 
