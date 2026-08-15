@@ -1,5 +1,90 @@
 # History of changes
 
+# v0.43
+
+## Audio
+
+- Better audio mixing for NES games.
+- Fixed a DC offset on the I2S audio.
+- Added an alternative I2S audio driver based on the official pico-extras driver. This is an opt-in build option; the default driver is unchanged.
+
+Special thanks go to [szuping](https://github.com/szuping) for his contribution to the audio fixes.
+
+## Game fixes
+
+- Fixed flickering on the bottom line of the top HUD in *Ganbare Goemon! - Karakuri Douchuu (Japan)*.
+
+## HDMI
+
+- More stable HDMI/DVI output on HSTX-based boards. Some monitors previously lost the picture intermittently and recovered with a visible glitch; the updated signal shape keeps the picture stable.
+
+## Settings menu
+
+- The options list is now scrollable, with up/down arrows when items extend beyond the visible window. SAVE/CANCEL/DEFAULT, the palette, and the help text stay anchored at fixed rows.
+- Note: the settings file format was bumped; existing `settings_nes.dat` files will be reset to defaults on first boot.
+
+## Developer
+
+- Added a headless Linux host harness for the InfoNES core, so PPU/CPU/mapper bugs can be reproduced on a PC without flashing a board.
+
+
+
+# v0.42
+
+## Features
+
+**Famicom Disk System**
+
+- PSRAM is no longer required to run Famicom Disk System games. The only requirement now is an RP2350-based board.
+- BIOS screen now displays correctly.
+- Added "FDS Auto Insert Disk 1 on Start" setting. When set to Off, the BIOS animation keeps playing until the user presses Button2 (A) to insert the disk.
+
+**NSF Player**
+
+- Fixed audio clipping.
+- Fixed pause/resume: elapsed time is preserved, and the player no longer skips to the next track when resuming.
+- Fixed audio delay on PicoDVI boards. Audio now starts in sync with playback right from the first track.
+
+**HDMI**
+
+- Added 8:7 pixel aspect ratio support for HSTX boards.
+- Added "Scanline Type" setting (HSTX boards only). Simple darkens odd lines; LCD adds a visible pixel-grid effect by also darkening alternating output columns. LCD is only available in 1:1 screen mode.
+- Screen mode and scanline settings now behave consistently across all HDMI boards.
+
+**USB Controllers**
+
+- Added two-player USB controller support. On the Adafruit Fruit Jam, two controllers can be connected directly to the board’s USB ports for multiplayer games. 
+
+This feature is confirmed working on the Adafruit Fruit Jam, Raspberry Pi Pico, and Pico 2. For the Raspberry Pi Pico and Pico 2, a USB Y-cable and USB hub are required.
+Currently, this does not yet work on the Waveshare RP2350-PiZero.
+
+Other configurations may also work when using a USB hub, but these have not yet been tested.
+
+**Other**
+
+- Added support for mapper 210 [#200](https://github.com/fhoedemakers/pico-infonesPlus/issues/200)
+- Test builds (VX.X) now show the build date and time on the splash screen.
+- Built against the latest TinyUSB version.
+
+
+## Fixes
+
+- Fixed external audio (PCM5000A) not working on RP2040 PicoDVI boards when enabled at boot, and resolved an intermittent audio glitch on the same boards.
+- Fixed audio distortion during loud sound effects on the Adafruit Fruit Jam.
+- Fixed volume imbalance between headphones and speaker on Adafruit Fruit Jam. Headphone volume is now automatically attenuated when headphones are inserted, so the volume control can be set for a comfortable speaker level without blasting headphones.
+- Better audio mixing for VRC6 games like Akumajou Densetsu (Castlevania III JP) [#199](https://github.com/fhoedemakers/pico-infonesPlus/issues/199)
+- Fixed background jitter in Akumajou Densetsu (Castlevania III JP) during vertical scroll sections. The playfield no longer shifts up and down by a pixel between frames.
+- Fixed HUD scroll glitches in Rush'n Attack, Galaxian (JP) and Robocop 3.
+- Fixed missing HUD in Alien 3.
+- Fixed crash when opening the settings menu.
+- Fixed a memory allocation bug in the HDMI driver on HSTX boards that wasted RAM.
+- Fixed mapper 19 not working correctly [#200](https://github.com/fhoedemakers/pico-infonesPlus/issues/200)
+- Improved display sync and fixed audio clipping on first launch by feeding blank frames.
+- Fixed settings menu always showing unsaved changes after the new scanline setting was added.
+- Updated the build configuration to be compatible with the latest TinyUSB version. [#202](https://github.com/fhoedemakers/pico-infonesPlus/issues/202) [#203](https://github.com/fhoedemakers/pico-infonesPlus/issues/203)
+
+
+
 # v0.41 
 
 ## Features

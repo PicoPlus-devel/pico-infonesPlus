@@ -18,6 +18,7 @@
 #include "InfoNES_System.h"
 #include "InfoNES_pAPU.h"
 #include <pico.h>
+#include "zapper.h" /* NES Zapper on controller port 2 ($4017 bits 3/4) */
 
 /* CPU cycle counter (defined in K6502.cpp), needed here for OAM DMA penalty. */
 extern int g_wPassedClocks;
@@ -180,6 +181,7 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
       // Set Joypad1 data
       byRet = (BYTE)((PAD1_Latch >> PAD1_Bit) & 1) | 0x40;
       PAD1_Bit = (PAD1_Bit == 23) ? 0 : (PAD1_Bit + 1);
+      zapperNote4016(); // diagnostics only; compiles away in release builds
       return byRet;
     }
     else if (wAddr == 0x4017)
@@ -187,7 +189,13 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
       // Set Joypad2 data
       byRet = (BYTE)((PAD2_Latch >> PAD2_Bit) & 1) | 0x40;
       PAD2_Bit = (PAD2_Bit == 23) ? 0 : (PAD2_Bit + 1);
-      return byRet;
+      // A Zapper on controller port 2 overlays bit 3 (light sensed at the
+      // current scanline) and bit 4 (trigger half-pulled) with the live GPIO
+      // levels, sampled right here rather than latched once per frame. Bit 0
+      // (the pad 2 serial data shifted above) and bit 6 (open bus) are left
+      // alone, so a controller in port 2 keeps working. Folds away to nothing
+      // when no Zapper is connected or support is compiled out.
+      return zapperApply4017(byRet);
     }
     else
     {

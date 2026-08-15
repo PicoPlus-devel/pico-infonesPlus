@@ -9,6 +9,7 @@
 - **NES Emulation** – Execute NES ROM files directly from an SD card
 - **SD Card Menu System** – Browse and launch games from an on-screen menu interface
 - **Dual Controller Support** – Two simultaneous controllers for multiplayer gameplay ([details](#about-two-player-games))
+- **NES Zapper (light gun)** – Beta support in controller port 2 of the [custom PCB](#nes-zapper-light-gun), using LCD-lag-corrected ROM patches and a third-party gun such as the Tomee Zapp Gun
 - **Save State Management** – Automatic battery-backed SRAM persistence and manual save states
 - **Famicom Disk System** – Support for FDS game images with user-supplied BIOS. More info on this in the [FDS Games](#famicom-disk-system-fds-games-1) section below.
 - **Multi-Region Support** – NTSC, PAL, and Dendy region compatibility
@@ -150,6 +151,7 @@ For more info, see [pio_usb.md](pio_usb.md).
 - One or optionally two original NES controllers for two player games.  In some configurations, soldering is required.
 - Original SNES controllers can be connected to the NES controller port(s) as well. The emulator detects automatically whether an NES or a SNES controller is attached, so no configuration is needed.
 - Wii Classic controller: Adafruit Feather RP2040, WaveShare RP2040 Pi-Zero, Adafruit Metro RP2350, Adafruit Fruit Jam boards only
+- NES Zapper (light gun): [custom PCB](#nes-zapper-light-gun) design v2.1 or later only, in controller port 2. Not available on the other configurations - GPIO27 and GPIO28 are already in use there. Needs LCD-lag-corrected ROM patches **and** a third-party gun such as the Tomee Zapp Gun; an original Nintendo Zapper does not work on a flat panel without a hardware modification. See the [NES Zapper](#nes-zapper-light-gun) section.
       
 Parts list for legacy controllers
   * NES or SNES controller. A second controller port and controller is optional and only needed if you want to play two player games using legacy controllers. Two player games can also be played with a USB controller and a legacy controller.
@@ -246,6 +248,7 @@ Click on the link below for your specific board configuration:
 - [Waveshare RP2350-PiZero Development Board](#waveshare-rp2040rp2350-pizero-development-board)
   * [3D printed case for this board](#3d-printed-case-for-rp2040rp2350-pizero)
 - [Printed Circuit Board (PCB) for Raspberry Pi Pico, Pico 2 or Pimoroni Pico Plus 2](#pcb-with-raspberry-pi-pico-or-pico-2-and-pimoroni-pico-plus-2)
+  * [NES Zapper (light gun)](#nes-zapper-light-gun)
   * [3D printed case for this PCB](#3d-printed-case-for-pcb)
 - [PCB with WaveShare RP2040/RP2350 Zero](#pcb-with-waveshare-rp2040rp2350-zero)
   * [3D printed case for this PCB](#3d-printed-case)
@@ -898,6 +901,40 @@ Choose either of the following:
 - Connect a USB controller for player 1 and a NES controller for player 2. You can use either NES controller ports. Use the OTG Y-Cable to connect a USB power supply and the USB controller.
 
 ![image0](https://github.com/user-attachments/assets/d40ed98f-4632-4161-986a-732d35290fac)
+
+### NES Zapper (light gun)
+
+> [!NOTE]
+> Beta. Works on the **PCB only**, in **controller port 2**, and needs a **third-party light gun** such as the Tomee Zapp Gun - an original Nintendo Zapper will not work on a flat panel unmodified. See [Which gun you need](#which-gun-you-need) below.
+
+PCB design **v2.1 and later** (so also the current v2.6) route the two extra data lines of NES controller port 2 to the Pico: **D3 → GPIO28** (light sensor) and **D4 → GPIO27** (trigger). The emulator reads those two lines directly into bits 3 and 4 of `$4017`, exactly as a real NES does. Flash one of the **piconesPlus_AdafruitDVISD_*** binaries (the PCB firmware); on all other boards GPIO27 and GPIO28 are already in use for something else, so Zapper support is not compiled in there.
+
+No setting has to be enabled. The gun is detected automatically the moment it is plugged in, because a Zapper actively drives its trigger line low while the trigger is released. A regular NES or SNES controller can stay in port 2 alongside the gun and keeps working - only bits 3 and 4 of `$4017` come from the Zapper, the pad's own data line is untouched.
+
+#### Which gun you need
+
+> [!IMPORTANT]
+> An **original Nintendo Zapper does not work on a flat panel without a hardware modification**.
+>
+> Use a third-party light gun made for modern displays. The **Tomee Zapp Gun for NES** is confirmed working and is what this support was developed and tested with. [neslcdmod.com](https://neslcdmod.com/) lists it among the guns known to work.
+
+#### Unmodified games will not work
+
+The original light gun games time their light detection against a CRT, which puts a pixel on screen the instant it is scanned out. An LCD/LED TV adds milliseconds of lag, so an unmodified *Duck Hunt* scores every shot as a miss. This is a property of flat panels, not of the emulator - the same games fail the same way on real NES hardware connected to a modern TV.
+
+[neslcdmod.com](https://neslcdmod.com/) provides IPS patches that add a calibration routine to compensate for that lag. Patches exist for **Duck Hunt**, **Wild Gunman**, **Hogan's Alley**, **Duck Hunt VS** and **Barker Bill's Trick Shooting**.
+
+- Download the patch for the game you want from [neslcdmod.com/roms](https://neslcdmod.com/roms/).
+- Apply it to the ROM revision the patch was made for, using a tool such as Lunar IPS or Flips. Check the ROM's CRC32 first - patching the wrong revision produces a broken ROM.
+- Copy the patched `.nes` file to the SD card like any other ROM.
+
+#### Calibrating
+
+Put the TV in **game mode** first (it is the single biggest reduction in display lag), then boot the patched ROM and follow its on-screen calibration: aim at the target it shows (`SHOOT HERE` / `FIRE ME`) and fire straight into it. The delay can also be adjusted by hand - the arrows change it in the main menu, and pressing `Start` during play shows the current value so it can be nudged. Recalibrate after changing TV, screen mode, or the **Overclock** setting.
+
+> [!TIP]
+> If the gun does not respond, or shots always hit or always miss, see
+> [zapper_troubleshooting.md](zapper_troubleshooting.md).
 
 ### 3D printed case for PCB
 
