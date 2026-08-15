@@ -1,9 +1,6 @@
 # CHANGELOG
 
-Beta support for the **NES Zapper** (light gun) in controller port 2 of the custom PCB, with a third-party gun such as the Tomee Zapp Gun.
-A new **Recently played** list of the last 20 games, opened with X in the ROM browser.
-Boards **without PSRAM no longer reflash** a game that is already in flash, so restarting it is near-instant.
-A **SNES controller wired to a NES controller port** now uses its A and B buttons instead of B and Y.
+Beta **NES Zapper** (light gun) support on the custom PCB, a **Recently played** list of the last 20 games, no more reflashing a game that is already in flash on boards without PSRAM, and correct A/B buttons for **SNES controllers wired to a NES port**.
 
 
 # General Info
