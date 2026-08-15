@@ -1,6 +1,6 @@
 # CHANGELOG
 
-New PCB design **v2.6** for Pico/Pico 2 with through-holes, now also usable with a Pimoroni Pico Plus 2. This is a hardware-only release: the emulator software is unchanged from v0.44.
+Beta **NES Zapper** (light gun) support on the custom PCB, a **Recently played** list of the last 20 games, no more reflashing a game that is already in flash on boards without PSRAM, and correct A/B buttons for **SNES controllers wired to a NES port**.
 
 
 # General Info
@@ -20,6 +20,69 @@ This can be fixed permanently with the [flash_config](https://github.com/fhoedem
 Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then requires erasing the flash with `universal_flash_nuke.uf2` first), and even after the fix these boards top out at 252 MHz — so the **Overclock** setting, and with it the VRC7 audio of *Lagrange Point (JP)*, cannot be used on them.
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
+
+# v0.46
+
+## Menu
+
+### Recently played
+
+The menu now keeps a list of the **last 20 games you started**, newest first. Open it with **X** in the ROM browser - that is button 3 on any pad: X on a SNES controller, Y on XInput, Triangle on PlayStation, C on Genesis - or from the new **Recently played** entry at the top of the settings menu.
+
+In the list, **A** starts the highlighted game, **SELECT** removes it from the list, **START** shows its artwork, and **B** closes the list. The settings menu only offers the entry when it is opened from the ROM browser, not from inside a running game.
+
+The list is plain text in `/recent_NES.txt` in the SD card root, one line per game, so it survives a reboot and can be edited or deleted on a PC. A game that is no longer on the card is reported as missing when you try to start it and can be dropped with SELECT. A damaged or unreadable list simply comes up empty - unlike the settings file, nothing gets reset.
+
+On boards without PSRAM, the game whose image is currently in flash is tagged **[READY]**: that is the one that starts without a reflash.
+
+### No more reflashing a game that is already in flash
+
+Boards without PSRAM copy the ROM into flash and reboot to start a game, and until now they did that on **every** launch - including for the game that was already in flash, costing seconds of blank screen for nothing. The emulator now records what it wrote (`/flashedrom.dat`) and skips programming when the selected game is exactly the image already there. The check is not just the file name: emulator, load address, byte swap, path, file size and timestamp must all match, and the flash contents are then verified with a CRC, so an image overwritten by another emulator under emuLoader is caught. Anything that does not match is flashed as before, and the record is dropped before the first erase, so a power cut during flashing can never leave a record that lies.
+
+This replaces the old `/START` marker file, which is now gone. It could only say "do not flash", never *which* ROM was in flash, and nothing had created it since an earlier refactor - had it, the game would have run with a zero CRC and its save states would have gone to `/SAVESTATES/NES/00000000/`.
+
+## Controllers
+
+### NES Zapper (light gun)
+
+Beta support for the **NES Zapper** (light gun) in NES controller **port 2**.
+
+This requires the custom PCB: design **v2.1 and later** (so also the current v2.6) route port 2's D3 line to GPIO27 (light sensor) and its D4 line to GPIO28 (trigger), and the emulator now reads those two lines into bits 3 and 4 of `$4017`, the way a real NES does. Only the **piconesPlus_AdafruitDVISD_*** binaries carry the feature; on every other supported board GPIO27 and GPIO28 are already used for something else (I2S clock pins, NES port 2, DVI/TMDS pairs, the PIO USB DP pin), so it is compiled out there.
+
+Note that the **v2.1 silkscreen labels the D3 and D4 pads the wrong way round** - what is printed as D3 is the physical D4 line and vice versa. Only the printing is wrong: the routing is the same on v2.1 and v2.6, a controller port soldered into the footprint works on both, and no firmware difference is needed. **v2.6 corrects the labels.**
+
+The Zapper **cannot be used on the Murmulator M1 and M2 boards**. Those PCBs leave D3 and D4 of the controller ports unconnected, so the gun's light and trigger lines never reach the board at all. This cannot be fixed in firmware.
+
+There is no setting to switch on. The gun is detected automatically when plugged in, since a Zapper holds its trigger line low while the trigger is released. A regular NES or SNES controller in port 2 keeps working alongside it - the pad's own data line in bit 0 is left untouched and only bits 3 and 4 come from the gun.
+
+Games need the LCD-lag correction patches from [neslcdmod.com](https://neslcdmod.com/) - available for *Duck Hunt*, *Wild Gunman*, *Hogan's Alley*, *Duck Hunt VS* and *Barker Bill's Trick Shooting*. Unpatched originals cannot work on a flat panel, because they time their light detection against a CRT; the same games fail the same way on real NES hardware connected to a modern TV.
+
+A suitable gun is needed as well: an **original Nintendo Zapper does not work on a flat panel without a hardware modification**, because its sensor is built around the brief bright flash of a CRT rather than the steady light of an LCD. Use a third-party gun made for modern displays - the **Tomee Zapp Gun for NES** is confirmed working and is what this was developed and tested with.
+
+See [NES Zapper (light gun)](https://github.com/fhoedemakers/pico-infonesPlus#nes-zapper-light-gun) in the readme for patching and calibration, and [zapper_troubleshooting.md](https://github.com/fhoedemakers/pico-infonesPlus/blob/main/zapper_troubleshooting.md) for troubleshooting, build options and measured timings.
+
+### SNES controllers on a NES controller port
+
+A **SNES controller wired to a NES controller port** now uses its A and B buttons instead of B and Y. Such a pad shifts out B and Y where a NES pad has A and B, so those were the two buttons that acted as NES A and B, and physical A did nothing at all — in games and in the menu, where "choose" landed on B. Its four face buttons are now named rather than taken positionally: **A is NES A, B is NES B**, and in the menu A chooses while B goes back, the same as on USB and Wii Classic pads. X, Y, L and R have no NES equivalent and are ignored, as on those pads. NES pads are unaffected, and so are SNES->NES adapter cables with conversion logic inside, which report NES buttons in NES order.
+
+The 12-button (16-clock) read is now confirmed against genuine SNES hardware, with a SNES controller port wired straight to the NES port GPIOs. Adapter *cables* are the thing to watch out for: several contain a converter, sometimes moulded into the plug, and then only 8 buttons can ever arrive.
+
+### Controller Test
+
+The **Controller Test** screen now names the buttons of a GPIO-wired pad according to what is actually attached. It used to label them in SNES order unconditionally, which is wrong for a NES pad: a NES pad shifts out the same first bits with different meanings (bit 0 is A, not B, and bit 1 is B, not Y). A NES pad now gets NES names with its A/X/L/R cells blanked, and a SNES pad gets SNES names. A port that has not identified itself yet - an idle SNES pad, an empty port and an 8-bit adapter cable are indistinguishable on the wire - shows NES names but keeps A/X/L/R on screen, so pressing one of those switches it to SNES names.
+
+The screen also shows the **detected pad type** and, for the two GPIO ports, the **raw word the pad shifted out** (`Sent by pad: 0002 hex`), taken before any NES/SNES interpretation. This tells a button that never reaches the Pico apart from one that is decoded wrong - which is what identified a SNES->NES adapter cable as an active converter rather than a passive rewire.
+
+## Fixes
+
+- Leaving the **Controller Test** screen no longer drops into the screensaver. The settings menu's idle timeout mistook the "just came back from another screen" marker for a timestamp, so anything that opened a screen of its own looked like a minute of inactivity on return.
+- Fixed a one-byte out-of-bounds write when byte-swapping an odd-sized ROM file, which corrupted the heap block next to it.
+
+## Developer
+
+- picoDVI (non-HSTX boards): line buffers queued for a line that a blank-margin change later puts inside a margin are now retired instead of being stranded, which used to deadlock the display with red lines. The menu's "do not reset the margins when a framebuffer is used" workaround was there for this. The line buffer pool can also be sized independently now with `-DDVI_N_LINE_BUFFERS=n` (default unchanged at 5).
+- The HSTX debug dump reports HDMI audio underruns **per second** next to the cumulative count. The cumulative counter runs from boot and includes the ~11025/s produced while browsing ROMs, so it says nothing about whether underruns are still happening.
+- `bld.sh` passes `$EXTRA_CMAKE_ARGS` through to cmake, so project-specific options can be set without changing the shared script.
 
 # v0.45
 
@@ -65,90 +128,6 @@ When using headers, make sure to download the **latest** 3D printed top case fro
 
 - Synced the SD card driver with upstream pico_fatfs: improved RP2350 A/B detection and more stable SD card access.
 
-
-
-# v0.43
-
-## Audio
-
-- Better audio mixing for NES games.
-- Fixed a DC offset on the I2S audio.
-- Added an alternative I2S audio driver based on the official pico-extras driver. This is an opt-in build option; the default driver is unchanged.
-
-Special thanks go to [szuping](https://github.com/szuping) for his contribution to the audio fixes.
-
-## Game fixes
-
-- Fixed flickering on the bottom line of the top HUD in *Ganbare Goemon! - Karakuri Douchuu (Japan)*.
-
-## HDMI
-
-- More stable HDMI/DVI output on HSTX-based boards. Some monitors previously lost the picture intermittently and recovered with a visible glitch; the updated signal shape keeps the picture stable.
-
-## Settings menu
-
-- The options list is now scrollable, with up/down arrows when items extend beyond the visible window. SAVE/CANCEL/DEFAULT, the palette, and the help text stay anchored at fixed rows.
-- Note: the settings file format was bumped; existing `settings_nes.dat` files will be reset to defaults on first boot.
-
-## Developer
-
-- Added a headless Linux host harness for the InfoNES core, so PPU/CPU/mapper bugs can be reproduced on a PC without flashing a board.
-
-
-
-# v0.42
-
-## Features
-
-**Famicom Disk System**
-
-- PSRAM is no longer required to run Famicom Disk System games. The only requirement now is an RP2350-based board.
-- BIOS screen now displays correctly.
-- Added "FDS Auto Insert Disk 1 on Start" setting. When set to Off, the BIOS animation keeps playing until the user presses Button2 (A) to insert the disk.
-
-**NSF Player**
-
-- Fixed audio clipping.
-- Fixed pause/resume: elapsed time is preserved, and the player no longer skips to the next track when resuming.
-- Fixed audio delay on PicoDVI boards. Audio now starts in sync with playback right from the first track.
-
-**HDMI**
-
-- Added 8:7 pixel aspect ratio support for HSTX boards.
-- Added "Scanline Type" setting (HSTX boards only). Simple darkens odd lines; LCD adds a visible pixel-grid effect by also darkening alternating output columns. LCD is only available in 1:1 screen mode.
-- Screen mode and scanline settings now behave consistently across all HDMI boards.
-
-**USB Controllers**
-
-- Added two-player USB controller support. On the Adafruit Fruit Jam, two controllers can be connected directly to the board’s USB ports for multiplayer games. 
-
-This feature is confirmed working on the Adafruit Fruit Jam, Raspberry Pi Pico, and Pico 2. For the Raspberry Pi Pico and Pico 2, a USB Y-cable and USB hub are required.
-Currently, this does not yet work on the Waveshare RP2350-PiZero.
-
-Other configurations may also work when using a USB hub, but these have not yet been tested.
-
-**Other**
-
-- Added support for mapper 210 [#200](https://github.com/fhoedemakers/pico-infonesPlus/issues/200)
-- Test builds (VX.X) now show the build date and time on the splash screen.
-- Built against the latest TinyUSB version.
-
-
-## Fixes
-
-- Fixed external audio (PCM5000A) not working on RP2040 PicoDVI boards when enabled at boot, and resolved an intermittent audio glitch on the same boards.
-- Fixed audio distortion during loud sound effects on the Adafruit Fruit Jam.
-- Fixed volume imbalance between headphones and speaker on Adafruit Fruit Jam. Headphone volume is now automatically attenuated when headphones are inserted, so the volume control can be set for a comfortable speaker level without blasting headphones.
-- Better audio mixing for VRC6 games like Akumajou Densetsu (Castlevania III JP) [#199](https://github.com/fhoedemakers/pico-infonesPlus/issues/199)
-- Fixed background jitter in Akumajou Densetsu (Castlevania III JP) during vertical scroll sections. The playfield no longer shifts up and down by a pixel between frames.
-- Fixed HUD scroll glitches in Rush'n Attack, Galaxian (JP) and Robocop 3.
-- Fixed missing HUD in Alien 3.
-- Fixed crash when opening the settings menu.
-- Fixed a memory allocation bug in the HDMI driver on HSTX boards that wasted RAM.
-- Fixed mapper 19 not working correctly [#200](https://github.com/fhoedemakers/pico-infonesPlus/issues/200)
-- Improved display sync and fixed audio clipping on first launch by feeding blank frames.
-- Fixed settings menu always showing unsaved changes after the new scanline setting was added.
-- Updated the build configuration to be compatible with the latest TinyUSB version. [#202](https://github.com/fhoedemakers/pico-infonesPlus/issues/202) [#203](https://github.com/fhoedemakers/pico-infonesPlus/issues/203)
 
 
 

@@ -26,6 +26,7 @@
 #include "pico/bootrom.h"
 #include "InfoNES_FDS.h"
 #include "InfoNES_NSF.h"
+#include "zapper.h"
 #if EMBEDDED_NES_ROM
 extern "C" const unsigned char embedded_nes_rom[];
 extern "C" const unsigned int embedded_nes_rom_len;
@@ -348,7 +349,28 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
     // static int rapidFireCounter = 0;
 
     ++rapidFireCounter;
-   
+
+#if NES_PIN_CLK != -1
+    // Buttons of a GPIO pad in NES order. A NES pad shifts them out that way
+    // already; a SNES pad puts its B and Y in the A and B slots, so its face
+    // buttons are named instead of taken positionally: physical A drives NES A
+    // and physical B drives NES B, the same as on USB and Wii Classic pads, and
+    // the same buttons the menu uses to choose and go back. X, Y, L and R have
+    // no NES equivalent and are ignored there too.
+    auto nespadGameBits = [](int padnum) -> int
+    {
+        if (nespad_padtype[padnum] != NESPAD_TYPE_SNES)
+        {
+            return nespad_states[padnum];
+        }
+        const uint16_t ext = nespad_states_ext[padnum];
+        int v = ext & (SELECT | START | UP | DOWN | LEFT | RIGHT); // same bits on both pads
+        if (ext & (1u << 8)) v |= A;
+        if (ext & (1u << 0)) v |= B;
+        return v;
+    };
+#endif
+
     bool usbConnected = false;
     for (int i = 0; i < 2; ++i)
     {
@@ -373,12 +395,12 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
         {
             if (i == 1)
             {
-                v = v | nespad_states[1] | nespad_states[0];
+                v = v | nespadGameBits(1) | nespadGameBits(0);
             }
         }
         else
         {
-            v |= nespad_states[i];
+            v |= nespadGameBits(i);
         }
 #endif
 
@@ -1036,6 +1058,8 @@ int InfoNES_LoadFrame()
 #if NES_PIN_CLK != -1
     nespad_read_finish(); // Sets global nespad_state var
 #endif
+    zapperPoll();    // Latch "Zapper present" on port 2 (+ optional debug trace)
+    zapperMeasureFrame(); // Display-lag measurement, compiled out by default
     tuh_task();
     // Frame rate calculation
     if (settings.flags.displayFrameRate)
@@ -1376,6 +1400,57 @@ void __not_in_flash_func(InfoNES_PostDrawLine)(int line)
         }
     }
 
+#if ZAPPER_SUPPORTED && ZAPPER_DEBUG_OVERLAY
+    // Zapper status readout, drawn on the character row below the frame rate
+    // counter. 32 characters at 8 pixels each is exactly the 256-pixel NES
+    // picture, which starts at offset 32 in the 320-wide line buffer.
+    //
+    // Note this puts bright pixels on every frame, which the gun's sensor sees -
+    // including the all-black and single-white-box frames the games use to work
+    // out where the gun is pointed. Diagnostics only, never while playing.
+    if (line >= 16 && line < 24)
+    {
+        WORD *zapBuffer =
+#if !HSTX
+            currentLineBuf == nullptr ? currentLineBuffer_->data() + 32 : currentLineBuf + 32;
+#else
+            currentLineBuffer_ + 32;
+#endif
+        WORD fgc = NesPalette[48];
+        WORD bgc = NesPalette[15];
+        int rowInChar = line % 8;
+        bool pastEnd = false;
+        for (int i = 0; i < ZAPPER_DBG_TEXT_LEN; i++)
+        {
+            if (zapperDbgText[i] == '\0')
+                pastEnd = true; // blank the tail rather than render stale bytes
+            char fontSlice = getcharslicefrom8x8font(pastEnd ? ' ' : zapperDbgText[i], rowInChar);
+            for (auto bit = 0; bit < 8; bit++)
+            {
+                *zapBuffer++ = (fontSlice & 1) ? fgc : bgc;
+                fontSlice >>= 1;
+            }
+        }
+    }
+#endif
+
+#if ZAPPER_SUPPORTED && ZAPPER_MEASURE
+    // Display-lag measurement takes over the picture entirely: flat black or a
+    // single flat white frame, so the only thing the gun can see is the flash.
+    {
+        WORD *mbuf =
+#if !HSTX
+            currentLineBuf == nullptr ? currentLineBuffer_->data() : currentLineBuf;
+#else
+            currentLineBuffer_;
+#endif
+        WORD c = zapperMeasureIsWhite() ? NesPalette[48] : NesPalette[15];
+        for (int x = 32; x < 32 + 256; x++)
+            mbuf[x] = c;
+        zapperMeasureLine(line);
+    }
+#endif
+
 #if !HSTX
 #if FRAMEBUFFERISPOSSIBLE
     if (!Frens::isFrameBufferUsed())
@@ -1468,6 +1543,8 @@ int main()
     isFatalError = !Frens::initAll(selectedRom, CPUFreqKHz, 4, 4, AUDIOBUFFERSIZE, false, true);
 
     scaleMode8_7_ = Frens::applyScreenMode(settings.screenMode);
+    initzapper();       // Claims GPIO27/28 as pulled-up inputs (custom PCB only)
+    zapperMeasureInit(); // Display-lag measurement, compiled out by default
     bool showSplash = true;
 #if PICO_RP2350
     g_settings_visibility_nes[MOPT_AUTO_SWAP_FDS_DISK] = 1;

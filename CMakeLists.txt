@@ -44,7 +44,7 @@ message("* Current build type is : ${CMAKE_BUILD_TYPE}")
 # Hardware / board selection (project-specific)
 # ---------------------------------------------------------------------------
 if(NOT HW_CONFIG)
-    set(HW_CONFIG 8 CACHE STRING "Select the hardware configuration for your board")
+    set(HW_CONFIG 2 CACHE STRING "Select the hardware configuration for your board")
 endif()
 
 if(NOT USE_HSTX)
@@ -53,8 +53,78 @@ endif()
 
 include("pico_shared/BoardConfigs.cmake")
 
+# ---------------------------------------------------------------------------
+# NES Zapper (light gun) on NES controller port 2.
+#
+# Custom PCB design v2.1 and later route port 2 pin D3 -> GPIO27 (light sensor)
+# and pin D4 -> GPIO28 (trigger). Beware the v2.1 silkscreen, which labels these
+# two pads the wrong way round; the routing is the same on v2.1 and v2.6 and
+# needs no firmware difference. That is HW_CONFIG 2 (Adafruit DVI + SD breakout
+# / custom PCB), the only supported configuration. Every other HW_CONFIG gets -1 ("not present"), which compiles
+# the feature out entirely -- on most of them GPIO 27/28 are already taken by
+# I2S clock pins, NES port 2, DVI/TMDS pairs or the PIO USB DP pin.
+#
+# Kept here rather than in pico_shared/BoardConfigs.cmake because that file is a
+# submodule shared with the other emulators, which have no Zapper support.
+#
+# Note: this must come after BoardConfigs.cmake, which is where USE_I2S_AUDIO is
+# set. Its value is either the string "0" or a driver name, hence STREQUAL.
+# ---------------------------------------------------------------------------
+# These are plain variables guarded by `if(NOT DEFINED ...)` rather than cache
+# entries, so the board-dependent defaults are recomputed on every configure. A
+# cache default would be baked into existing build directories and would not
+# follow a change made here. An explicit -DZAPPER_...=x on the command line does
+# create a cache entry, so DEFINED sees it and the override still wins.
+if(NOT DEFINED ZAPPER_D3 AND NOT DEFINED ZAPPER_D4)
+    if(HW_CONFIG EQUAL 2 AND "${USE_I2S_AUDIO}" STREQUAL "0")
+        set(ZAPPER_D3 27) # light sensor
+        set(ZAPPER_D4 28) # trigger
+    else()
+        # I2S audio on HW_CONFIG 2 claims GPIO 26 (data) and 27/28 (clock base
+        # pair), so the Zapper pins have to give way if it is ever enabled there.
+        set(ZAPPER_D3 -1)
+        set(ZAPPER_D4 -1)
+    endif()
+endif()
+
+# Line polarity, see zapper.h. The light line arrives inverted with respect to
+# the value the NES puts on the bus: measured with a Tomee Zapp Gun, the light
+# pin reads low while the sensor is covered and high while it sees light,
+# whereas $4017 bit 3 is defined as 0 = light detected. The NES inverts this line
+# between the connector and the CPU; a direct GPIO wire does not, so it has to be
+# inverted in software. The trigger line needs no such correction.
+# Override on the command line if a gun behaves differently, for example:
+#   cmake -DHW_CONFIG=2 -DZAPPER_INVERT_D3=0 -DZAPPER_DEBUG=1 ..
+if(NOT DEFINED ZAPPER_INVERT_D3)
+    set(ZAPPER_INVERT_D3 1)
+endif()
+if(NOT DEFINED ZAPPER_INVERT_D4)
+    set(ZAPPER_INVERT_D4 0)
+endif()
+if(NOT DEFINED ZAPPER_DEBUG)
+    set(ZAPPER_DEBUG 0) # bit mask: 1 = UART trace, 2 = on-screen readout
+endif()
+# Display-lag measurement, see zapper.h. Replaces the picture with a black field
+# and periodic white flashes, so it is a measuring instrument, not a play mode.
+if(NOT DEFINED ZAPPER_MEASURE)
+    set(ZAPPER_MEASURE 0)
+endif()
+if(NOT DEFINED ZAPPER_MEASURE_WHITE)
+    set(ZAPPER_MEASURE_WHITE 1) # frames of white per flash
+endif()
+if(ZAPPER_D3 EQUAL -1 OR ZAPPER_D4 EQUAL -1)
+    message("* Zapper support: disabled for HW_CONFIG ${HW_CONFIG}")
+else()
+    message("* Zapper support: D3 (light) = GPIO${ZAPPER_D3}, D4 (trigger) = GPIO${ZAPPER_D4}, "
+            "invert D3/D4 = ${ZAPPER_INVERT_D3}/${ZAPPER_INVERT_D4}, debug = ${ZAPPER_DEBUG}, "
+            "measure = ${ZAPPER_MEASURE}")
+    if(ZAPPER_MEASURE)
+        message("*   NOTE: ZAPPER_MEASURE replaces the picture with a black/white flash pattern.")
+    endif()
+endif()
+
 if(NOT PICO_BOARD)
-    set(PICO_BOARD pico2 CACHE STRING "Board type")
+    set(PICO_BOARD pico CACHE STRING "Board type")
     message("PICO_BOARD not set, using default: ${PICO_BOARD}")
 endif()
 
@@ -113,6 +183,7 @@ add_executable(${projectname}
     DefaultSS444.c
     DefaultSS555.c
     state.cpp
+    zapper.cpp
 )
 
 # Optional: embed a NES ROM directly into the firmware.
@@ -185,6 +256,13 @@ target_compile_definitions(${projectname} PRIVATE
     NES_PIO_1=${NES_PIO_1}
     WII_PIN_SDA=${WII_SDA}
     WII_PIN_SCL=${WII_SCL}
+    ZAPPER_D3=${ZAPPER_D3}
+    ZAPPER_D4=${ZAPPER_D4}
+    ZAPPER_INVERT_D3=${ZAPPER_INVERT_D3}
+    ZAPPER_INVERT_D4=${ZAPPER_INVERT_D4}
+    ZAPPER_DEBUG=${ZAPPER_DEBUG}
+    ZAPPER_MEASURE=${ZAPPER_MEASURE}
+    ZAPPER_MEASURE_WHITE=${ZAPPER_MEASURE_WHITE}
     LED_GPIO_PIN=${LED_GPIO_PIN}
     HW_CONFIG=${HW_CONFIG}
     WIIPAD_I2C=${WIIPAD_I2C}

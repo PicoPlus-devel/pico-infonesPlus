@@ -31,16 +31,18 @@ From the repo root:
 ```sh
 g++ -O1 -g -fsanitize=address -std=gnu++17 \
   -DPICO_RP2350=1 -DNDEBUG -DPICO_NO_HARDWARE=1 \
-  -I hosttest/shim -I infones -I pico_lib -I pico_shared \
+  -I hosttest/shim -I infones -I pico_lib -I pico_shared -I . \
   -o hosttest/nes_host \
   hosttest/host_main.cpp hosttest/stubs.cpp \
   infones/InfoNES.cpp infones/K6502.cpp infones/InfoNES_Mapper.cpp \
-  infones/InfoNES_pAPU.cpp infones/InfoNES_Region.cpp \
+  infones/InfoNES_pAPU.cpp infones/InfoNES_pAPU_Vrc7.cpp infones/InfoNES_Region.cpp \
   infones/InfoNES_NSF.cpp infones/InfoNES_FDS.cpp
 ```
 
 - AddressSanitizer is intentional: it doubles as a memory-bug detector for
   the core. Drop `-fsanitize=address` for faster runs.
+- `-I .` (repo root, listed last so the shims keep priority) is there for
+  `zapper.h`, which `K6502_rw.h` includes.
 - `-DPICO_RP2350=1` enables the MMC5 / VRC7 CHR-RAM / FDS code paths.
 - `-DNDEBUG` collapses `util/work_meter.h` to empty inlines.
 
@@ -105,6 +107,8 @@ UP+A at frame 200 for 10 frames each.
   variation. A bug that is *intermittent* on the device usually shows up
   here as its always-broken variant.
 - Audio is stubbed entirely (`InfoNES_SoundOutput` is a sink).
+- Zapper support compiles out (`ZAPPER_D3`/`ZAPPER_D4` are undefined here, so
+  `ZAPPER_SUPPORTED` is 0), and `$4017` reads behave exactly as before.
 - NSF files aren't auto-detected (no `.nsf` dispatch in the harness).
 - The harness does NOT load NVRAM; cartridge save RAM starts empty every run.
 - `isPsramEnabled()` always returns true, so FDS multi-side games keep all

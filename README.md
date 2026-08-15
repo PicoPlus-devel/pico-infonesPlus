@@ -8,7 +8,9 @@
 
 - **NES Emulation** – Execute NES ROM files directly from an SD card
 - **SD Card Menu System** – Browse and launch games from an on-screen menu interface
+- **Recently Played List** – The last 20 games you started, one button press away in the menu ([details](#recently-played-games))
 - **Dual Controller Support** – Two simultaneous controllers for multiplayer gameplay ([details](#about-two-player-games))
+- **NES Zapper (light gun)** – Beta support in controller port 2 of the [custom PCB](#nes-zapper-light-gun), using LCD-lag-corrected ROM patches and a third-party gun such as the Tomee Zapp Gun
 - **Save State Management** – Automatic battery-backed SRAM persistence and manual save states
 - **Famicom Disk System** – Support for FDS game images with user-supplied BIOS. More info on this in the [FDS Games](#famicom-disk-system-fds-games-1) section below.
 - **Multi-Region Support** – NTSC, PAL, and Dendy region compatibility
@@ -150,6 +152,7 @@ For more info, see [pio_usb.md](pio_usb.md).
 - One or optionally two original NES controllers for two player games.  In some configurations, soldering is required.
 - Original SNES controllers can be connected to the NES controller port(s) as well. The emulator detects automatically whether an NES or a SNES controller is attached, so no configuration is needed.
 - Wii Classic controller: Adafruit Feather RP2040, WaveShare RP2040 Pi-Zero, Adafruit Metro RP2350, Adafruit Fruit Jam boards only
+- NES Zapper (light gun): [custom PCB](#nes-zapper-light-gun) design v2.1 or later only, in controller port 2. Not available on the other configurations - GPIO27 and GPIO28 are already in use there, and the Murmulator M1/M2 boards leave the controller ports' D3 and D4 unconnected altogether. Needs LCD-lag-corrected ROM patches **and** a third-party gun such as the Tomee Zapp Gun; an original Nintendo Zapper does not work on a flat panel without a hardware modification. See the [NES Zapper](#nes-zapper-light-gun) section.
       
 Parts list for legacy controllers
   * NES or SNES controller. A second controller port and controller is optional and only needed if you want to play two player games using legacy controllers. Two player games can also be played with a USB controller and a legacy controller.
@@ -186,6 +189,8 @@ When using a USB hub with a Raspberry Pi Pico, you need an OTG USB-Y cable to co
 Some boards support additional memory called PSRAM, with a capacity of up to 8 MB. On certain boards this comes pre-installed, while on others it is optional and must be soldered manually. The emulator detects the PSRAM and its size at boot and will automatically make use of it.
 
 Without PSRAM, selecting a game ROM triggers a reboot: the ROM is written to flash memory during startup to prevent the system from locking up. This process is relatively slow, taking several seconds before the game starts.
+
+Starting the game that is already in flash is quick, though: the emulator remembers which ROM it wrote there and skips the write when you select that same game again. It still reboots, but without the several seconds of flashing. In the [recently played list](#recently-played-games) that game is tagged **[READY]**.
 
 With PSRAM, this step is no longer needed. Games are loaded directly from the SD card into PSRAM and executed immediately, resulting in much faster startup times.
 
@@ -246,6 +251,7 @@ Click on the link below for your specific board configuration:
 - [Waveshare RP2350-PiZero Development Board](#waveshare-rp2040rp2350-pizero-development-board)
   * [3D printed case for this board](#3d-printed-case-for-rp2040rp2350-pizero)
 - [Printed Circuit Board (PCB) for Raspberry Pi Pico, Pico 2 or Pimoroni Pico Plus 2](#pcb-with-raspberry-pi-pico-or-pico-2-and-pimoroni-pico-plus-2)
+  * [NES Zapper (light gun)](#nes-zapper-light-gun)
   * [3D printed case for this PCB](#3d-printed-case-for-pcb)
 - [PCB with WaveShare RP2040/RP2350 Zero](#pcb-with-waveshare-rp2040rp2350-zero)
   * [3D printed case for this PCB](#3d-printed-case)
@@ -899,6 +905,43 @@ Choose either of the following:
 
 ![image0](https://github.com/user-attachments/assets/d40ed98f-4632-4161-986a-732d35290fac)
 
+### NES Zapper (light gun)
+
+> [!NOTE]
+> Beta. Works on the **PCB only**, in **controller port 2**, and needs a **third-party light gun** such as the Tomee Zapp Gun - an original Nintendo Zapper will not work on a flat panel unmodified. See [Which gun you need](#which-gun-you-need) below.
+
+PCB design **v2.1 and later** (so also the current v2.6) route the two extra data lines of NES controller port 2 to the Pico: **D3 → GPIO27** (light sensor) and **D4 → GPIO28** (trigger). The emulator reads those two lines directly into bits 3 and 4 of `$4017`, exactly as a real NES does. Flash one of the **piconesPlus_AdafruitDVISD_*** binaries (the PCB firmware); on all other boards GPIO27 and GPIO28 are already in use for something else, so Zapper support is not compiled in there.
+
+No setting has to be enabled. The gun is detected automatically the moment it is plugged in, because a Zapper actively drives its trigger line low while the trigger is released. A regular NES or SNES controller can stay in port 2 alongside the gun and keeps working - only bits 3 and 4 of `$4017` come from the Zapper, the pad's own data line is untouched.
+
+> [!NOTE]
+> The Zapper **cannot be used on the Murmulator M1 and M2 boards**. Those PCBs leave D3 and D4 of the controller ports unconnected, so the gun's light and trigger lines never reach the board at all. This cannot be fixed in firmware.
+
+#### Which gun you need
+
+> [!IMPORTANT]
+> An **original Nintendo Zapper does not work on a flat panel without a hardware modification**.
+>
+> Use a third-party light gun made for modern displays. The **Tomee Zapp Gun for NES** is confirmed working and is what this support was developed and tested with. [neslcdmod.com](https://neslcdmod.com/) lists it among the guns known to work.
+
+#### Unmodified games will not work
+
+The original light gun games time their light detection against a CRT, which puts a pixel on screen the instant it is scanned out. An LCD/LED TV adds milliseconds of lag, so an unmodified *Duck Hunt* scores every shot as a miss. This is a property of flat panels, not of the emulator - the same games fail the same way on real NES hardware connected to a modern TV.
+
+[neslcdmod.com](https://neslcdmod.com/) provides IPS patches that add a calibration routine to compensate for that lag. Patches exist for **Duck Hunt**, **Wild Gunman**, **Hogan's Alley**, **Duck Hunt VS** and **Barker Bill's Trick Shooting**.
+
+- Download the patch for the game you want from [neslcdmod.com/roms](https://neslcdmod.com/roms/).
+- Apply it to the ROM revision the patch was made for, using a tool such as Lunar IPS or Flips. Check the ROM's CRC32 first - patching the wrong revision produces a broken ROM.
+- Copy the patched `.nes` file to the SD card like any other ROM.
+
+#### Calibrating
+
+Put the TV in **game mode** first (it is the single biggest reduction in display lag), then boot the patched ROM and follow its on-screen calibration: aim at the target it shows (`SHOOT HERE` / `FIRE ME`) and fire straight into it. The delay can also be adjusted by hand - the arrows change it in the main menu, and pressing `Start` during play shows the current value so it can be nudged. Recalibrate after changing TV, screen mode, or the **Overclock** setting.
+
+> [!TIP]
+> If the gun does not respond, or shots always hit or always miss, see
+> [zapper_troubleshooting.md](zapper_troubleshooting.md).
+
 ### 3D printed case for PCB
 
 Gavin Knight ([DynaMight1124](https://github.com/DynaMight1124)) designed a NES-like case you can 3D print as an enclosure for this PCB.  You can find it here: [https://www.thingiverse.com/thing:6689537](https://www.thingiverse.com/thing:6689537). Here you can find two designs: the latest design for PCB v2.0  and the previous design for [PCB v0.2](PCB/v0.2). In the latest v2.0 design, you can choose between two top covers, one with a button connecting to the bootsel button for easy firmware upgrades, the other without the button. In this case you have to remove the top cover to access the bootsel button. See images below. Make sure to print the correct files for the PCB version you own. You can find more information on Gavin's Thingiverse page.
@@ -1001,11 +1044,15 @@ Download the metadata pack from the [releases page](https://github.com/fhoedemak
 
 # Gamepad and keyboard usage
 
-|     | (S)NES | Genesis | XInput | DualShock/DualSense | 
-| --- | ------ | ------- | ------ | ---------------- |
-| Button1 | B  |    A    |   A    |    X             |
-| Button2 | A  |    B    |   B    |   Circle         |
-| Select  | select | Mode or C | Select | Select     |
+|     | (S)NES | Genesis | XInput | DualShock/DualSense | Wii Classic |
+| --- | ------ | ------- | ------ | ---------------- | ----------- |
+| Button1 | B  |    A    |   A    |    X             |   B         |
+| Button2 | A  |    B    |   B    |   Circle         |   A         |
+| Button3 | X (SNES only) | C | Y | Triangle    |   X         |
+| Select  | select | Mode or C | Select | Select     |   Select    |
+
+> [!NOTE]
+> An original NES controller has no Button3. Everything reachable with it can also be reached from the settings menu.
 
 ## Menu 
 Gamepad buttons:
@@ -1013,6 +1060,7 @@ Gamepad buttons:
 - LEFT/RIGHT: next/previous page.
 - Button2: Open folder/flash and start game.
 - Button1: Back to parent folder.
+- Button3: Open the [recently played list](#recently-played-games).
 - START: Show [metadata](#using-metadata) and box art (when available)
 - SELECT: Opens the settings menu. Here you can change settings like screen mode, scanline type, framerate display, menu colours and other board specific settings. The settings menu can also be opened in-game. See [Settings menu](#settings-menu) below for the full list.
 - SELECT + Button2: Force DVI mode (HSTX only). Useful if a DVI monitor shows no picture. This will restore the image.
@@ -1021,8 +1069,34 @@ When using a USB keyboard:
 - Cursor keys: Up, Down, left, right
 - Z: Back to parent folder
 - X: Open Folder/flash and start a game
+- C: Open the [recently played list](#recently-played-games).
 - S: Show [metadata](#using-metadata) and box art (when available).
 - A: acts as the select button.
+
+## Recently played games
+
+The menu keeps a list of the **last 20 games you started**, most recent first. Open it with **Button3** in the menu, or with the **Recently played** entry at the top of the [settings menu](#settings-menu). That entry is only there when the settings menu is opened from the menu - a game cannot be started from inside a running game.
+
+> [!NOTE]
+> On an original 3-button Genesis Mini controller, C acts as SELECT and opens the settings menu instead. Take the **Recently played** entry there.
+
+In the list:
+
+| Button | Action |
+| ------ | ------ |
+| UP/DOWN | Select a game. |
+| Button2 | Start the highlighted game. |
+| Button1 | Close the list and return to the menu. |
+| SELECT | Remove the highlighted game from the list. Asks for confirmation first. This only removes the entry, the ROM on the SD card is left alone. |
+| START | Show [metadata](#using-metadata) and box art (when available). |
+
+Games are added to the list automatically when you start them, so nothing has to be enabled. Starting a game that is already in the list moves it back to the top. The list closes by itself after a minute without input.
+
+The list is kept in **`/recent_NES.txt`** in the root of the SD card, as plain text with one game per line. It survives a reboot and can be read, edited or deleted on a PC. Deleting the file simply empties the list, and a damaged file is treated as an empty list - unlike the settings file, nothing else is reset. Each emulator running under [pico-bootLoader](#running-under-pico-bootloader) keeps its own list.
+
+If a game was moved, renamed or deleted on the SD card in the meantime, the list says so instead of starting it. Use SELECT to remove such an entry.
+
+On boards **without** PSRAM, one entry can be tagged **[READY]**. That is the game whose ROM is currently written to flash, which is the one that starts without waiting for the flashing step. See [PSRAM](#psram).
 
 ## Settings menu
 
@@ -1035,6 +1109,7 @@ running. Not every entry is available on every board or in every situation.
 | Quit game / Back to main menu | Leave the game and return to the SD card menu. Battery-backed save RAM is written to the SD card here. In-game only. |
 | Reset game | Reset the running game. In-game only. |
 | Save/Load State | Manage save states. In-game only. |
+| Recently played | Open the list of the [last 20 games you started](#recently-played-games) and restart one of them. Menu only, not available in-game. |
 | Screen Mode | Cycle the screen modes, including the 8:7 pixel aspect ratio modes. |
 | Scanline Type | Simple or LCD style scanlines. HSTX boards only. |
 | Framerate Overlay | Show the frames per second on screen. |
