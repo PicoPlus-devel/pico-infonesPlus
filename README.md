@@ -8,6 +8,7 @@
 
 - **NES Emulation** – Execute NES ROM files directly from an SD card
 - **SD Card Menu System** – Browse and launch games from an on-screen menu interface
+- **Recently Played List** – The last 20 games you started, one button press away in the menu ([details](#recently-played-games))
 - **Dual Controller Support** – Two simultaneous controllers for multiplayer gameplay ([details](#about-two-player-games))
 - **NES Zapper (light gun)** – Beta support in controller port 2 of the [custom PCB](#nes-zapper-light-gun), using LCD-lag-corrected ROM patches and a third-party gun such as the Tomee Zapp Gun
 - **Save State Management** – Automatic battery-backed SRAM persistence and manual save states
@@ -188,6 +189,8 @@ When using a USB hub with a Raspberry Pi Pico, you need an OTG USB-Y cable to co
 Some boards support additional memory called PSRAM, with a capacity of up to 8 MB. On certain boards this comes pre-installed, while on others it is optional and must be soldered manually. The emulator detects the PSRAM and its size at boot and will automatically make use of it.
 
 Without PSRAM, selecting a game ROM triggers a reboot: the ROM is written to flash memory during startup to prevent the system from locking up. This process is relatively slow, taking several seconds before the game starts.
+
+Starting the game that is already in flash is quick, though: the emulator remembers which ROM it wrote there and skips the write when you select that same game again. It still reboots, but without the several seconds of flashing. In the [recently played list](#recently-played-games) that game is tagged **[READY]**.
 
 With PSRAM, this step is no longer needed. Games are loaded directly from the SD card into PSRAM and executed immediately, resulting in much faster startup times.
 
@@ -1041,11 +1044,15 @@ Download the metadata pack from the [releases page](https://github.com/fhoedemak
 
 # Gamepad and keyboard usage
 
-|     | (S)NES | Genesis | XInput | DualShock/DualSense | 
-| --- | ------ | ------- | ------ | ---------------- |
-| Button1 | B  |    A    |   A    |    X             |
-| Button2 | A  |    B    |   B    |   Circle         |
-| Select  | select | Mode or C | Select | Select     |
+|     | (S)NES | Genesis | XInput | DualShock/DualSense | Wii Classic |
+| --- | ------ | ------- | ------ | ---------------- | ----------- |
+| Button1 | B  |    A    |   A    |    X             |   B         |
+| Button2 | A  |    B    |   B    |   Circle         |   A         |
+| Button3 | X (SNES only) | C | Y | Triangle    |   X         |
+| Select  | select | Mode or C | Select | Select     |   Select    |
+
+> [!NOTE]
+> An original NES controller has no Button3. Everything reachable with it can also be reached from the settings menu.
 
 ## Menu 
 Gamepad buttons:
@@ -1053,6 +1060,7 @@ Gamepad buttons:
 - LEFT/RIGHT: next/previous page.
 - Button2: Open folder/flash and start game.
 - Button1: Back to parent folder.
+- Button3: Open the [recently played list](#recently-played-games).
 - START: Show [metadata](#using-metadata) and box art (when available)
 - SELECT: Opens the settings menu. Here you can change settings like screen mode, scanline type, framerate display, menu colours and other board specific settings. The settings menu can also be opened in-game. See [Settings menu](#settings-menu) below for the full list.
 - SELECT + Button2: Force DVI mode (HSTX only). Useful if a DVI monitor shows no picture. This will restore the image.
@@ -1061,8 +1069,34 @@ When using a USB keyboard:
 - Cursor keys: Up, Down, left, right
 - Z: Back to parent folder
 - X: Open Folder/flash and start a game
+- C: Open the [recently played list](#recently-played-games).
 - S: Show [metadata](#using-metadata) and box art (when available).
 - A: acts as the select button.
+
+## Recently played games
+
+The menu keeps a list of the **last 20 games you started**, most recent first. Open it with **Button3** in the menu, or with the **Recently played** entry at the top of the [settings menu](#settings-menu). That entry is only there when the settings menu is opened from the menu - a game cannot be started from inside a running game.
+
+> [!NOTE]
+> On an original 3-button Genesis Mini controller, C acts as SELECT and opens the settings menu instead. Take the **Recently played** entry there.
+
+In the list:
+
+| Button | Action |
+| ------ | ------ |
+| UP/DOWN | Select a game. |
+| Button2 | Start the highlighted game. |
+| Button1 | Close the list and return to the menu. |
+| SELECT | Remove the highlighted game from the list. Asks for confirmation first. This only removes the entry, the ROM on the SD card is left alone. |
+| START | Show [metadata](#using-metadata) and box art (when available). |
+
+Games are added to the list automatically when you start them, so nothing has to be enabled. Starting a game that is already in the list moves it back to the top. The list closes by itself after a minute without input.
+
+The list is kept in **`/recent_NES.txt`** in the root of the SD card, as plain text with one game per line. It survives a reboot and can be read, edited or deleted on a PC. Deleting the file simply empties the list, and a damaged file is treated as an empty list - unlike the settings file, nothing else is reset. Each emulator running under [pico-bootLoader](#running-under-pico-bootloader) keeps its own list.
+
+If a game was moved, renamed or deleted on the SD card in the meantime, the list says so instead of starting it. Use SELECT to remove such an entry.
+
+On boards **without** PSRAM, one entry can be tagged **[READY]**. That is the game whose ROM is currently written to flash, which is the one that starts without waiting for the flashing step. See [PSRAM](#psram).
 
 ## Settings menu
 
@@ -1075,6 +1109,7 @@ running. Not every entry is available on every board or in every situation.
 | Quit game / Back to main menu | Leave the game and return to the SD card menu. Battery-backed save RAM is written to the SD card here. In-game only. |
 | Reset game | Reset the running game. In-game only. |
 | Save/Load State | Manage save states. In-game only. |
+| Recently played | Open the list of the [last 20 games you started](#recently-played-games) and restart one of them. Menu only, not available in-game. |
 | Screen Mode | Cycle the screen modes, including the 8:7 pixel aspect ratio modes. |
 | Scanline Type | Simple or LCD style scanlines. HSTX boards only. |
 | Framerate Overlay | Show the frames per second on screen. |
