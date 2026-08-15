@@ -1,6 +1,8 @@
 # CHANGELOG
 
 Beta support for the **NES Zapper** (light gun) in controller port 2 of the custom PCB, with a third-party gun such as the Tomee Zapp Gun.
+A new **Recently played** list of the last 20 games, opened with X in the ROM browser.
+Boards **without PSRAM no longer reflash** a game that is already in flash, so restarting it is near-instant.
 A **SNES controller wired to a NES controller port** now uses its A and B buttons instead of B and Y.
 
 
@@ -24,6 +26,24 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 
 # v0.46
 
+## Menu
+
+### Recently played
+
+The menu now keeps a list of the **last 20 games you started**, newest first. Open it with **X** in the ROM browser - that is button 3 on any pad: X on a SNES controller, Y on XInput, Triangle on PlayStation, C on Genesis - or from the new **Recently played** entry at the top of the settings menu.
+
+In the list, **A** starts the highlighted game, **SELECT** removes it from the list, **START** shows its artwork, and **B** closes the list. The settings menu only offers the entry when it is opened from the ROM browser, not from inside a running game.
+
+The list is plain text in `/recent_NES.txt` in the SD card root, one line per game, so it survives a reboot and can be edited or deleted on a PC. A game that is no longer on the card is reported as missing when you try to start it and can be dropped with SELECT. A damaged or unreadable list simply comes up empty - unlike the settings file, nothing gets reset.
+
+On boards without PSRAM, the game whose image is currently in flash is tagged **[READY]**: that is the one that starts without a reflash.
+
+### No more reflashing a game that is already in flash
+
+Boards without PSRAM copy the ROM into flash and reboot to start a game, and until now they did that on **every** launch - including for the game that was already in flash, costing seconds of blank screen for nothing. The emulator now records what it wrote (`/flashedrom.dat`) and skips programming when the selected game is exactly the image already there. The check is not just the file name: emulator, load address, byte swap, path, file size and timestamp must all match, and the flash contents are then verified with a CRC, so an image overwritten by another emulator under emuLoader is caught. Anything that does not match is flashed as before, and the record is dropped before the first erase, so a power cut during flashing can never leave a record that lies.
+
+This replaces the old `/START` marker file, which is now gone. It could only say "do not flash", never *which* ROM was in flash, and nothing had created it since an earlier refactor - had it, the game would have run with a zero CRC and its save states would have gone to `/SAVESTATES/NES/00000000/`.
+
 ## Controllers
 
 ### NES Zapper (light gun)
@@ -31,6 +51,8 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 Beta support for the **NES Zapper** (light gun) in NES controller **port 2**.
 
 This requires the custom PCB: design **v2.1 and later** (so also the current v2.6) route port 2's D3 line to GPIO27 (light sensor) and its D4 line to GPIO28 (trigger), and the emulator now reads those two lines into bits 3 and 4 of `$4017`, the way a real NES does. Only the **piconesPlus_AdafruitDVISD_*** binaries carry the feature; on every other supported board GPIO27 and GPIO28 are already used for something else (I2S clock pins, NES port 2, DVI/TMDS pairs, the PIO USB DP pin), so it is compiled out there.
+
+Note that the **v2.1 silkscreen labels the D3 and D4 pads the wrong way round** - what is printed as D3 is the physical D4 line and vice versa. Only the printing is wrong: the routing is the same on v2.1 and v2.6, a controller port soldered into the footprint works on both, and no firmware difference is needed. **v2.6 corrects the labels.**
 
 The Zapper **cannot be used on the Murmulator M1 and M2 boards**. Those PCBs leave D3 and D4 of the controller ports unconnected, so the gun's light and trigger lines never reach the board at all. This cannot be fixed in firmware.
 
@@ -45,6 +67,25 @@ See [NES Zapper (light gun)](https://github.com/fhoedemakers/pico-infonesPlus#ne
 ### SNES controllers on a NES controller port
 
 A **SNES controller wired to a NES controller port** now uses its A and B buttons instead of B and Y. Such a pad shifts out B and Y where a NES pad has A and B, so those were the two buttons that acted as NES A and B, and physical A did nothing at all — in games and in the menu, where "choose" landed on B. Its four face buttons are now named rather than taken positionally: **A is NES A, B is NES B**, and in the menu A chooses while B goes back, the same as on USB and Wii Classic pads. X, Y, L and R have no NES equivalent and are ignored, as on those pads. NES pads are unaffected, and so are SNES->NES adapter cables with conversion logic inside, which report NES buttons in NES order.
+
+The 12-button (16-clock) read is now confirmed against genuine SNES hardware, with a SNES controller port wired straight to the NES port GPIOs. Adapter *cables* are the thing to watch out for: several contain a converter, sometimes moulded into the plug, and then only 8 buttons can ever arrive.
+
+### Controller Test
+
+The **Controller Test** screen now names the buttons of a GPIO-wired pad according to what is actually attached. It used to label them in SNES order unconditionally, which is wrong for a NES pad: a NES pad shifts out the same first bits with different meanings (bit 0 is A, not B, and bit 1 is B, not Y). A NES pad now gets NES names with its A/X/L/R cells blanked, and a SNES pad gets SNES names. A port that has not identified itself yet - an idle SNES pad, an empty port and an 8-bit adapter cable are indistinguishable on the wire - shows NES names but keeps A/X/L/R on screen, so pressing one of those switches it to SNES names.
+
+The screen also shows the **detected pad type** and, for the two GPIO ports, the **raw word the pad shifted out** (`Sent by pad: 0002 hex`), taken before any NES/SNES interpretation. This tells a button that never reaches the Pico apart from one that is decoded wrong - which is what identified a SNES->NES adapter cable as an active converter rather than a passive rewire.
+
+## Fixes
+
+- Leaving the **Controller Test** screen no longer drops into the screensaver. The settings menu's idle timeout mistook the "just came back from another screen" marker for a timestamp, so anything that opened a screen of its own looked like a minute of inactivity on return.
+- Fixed a one-byte out-of-bounds write when byte-swapping an odd-sized ROM file, which corrupted the heap block next to it.
+
+## Developer
+
+- picoDVI (non-HSTX boards): line buffers queued for a line that a blank-margin change later puts inside a margin are now retired instead of being stranded, which used to deadlock the display with red lines. The menu's "do not reset the margins when a framebuffer is used" workaround was there for this. The line buffer pool can also be sized independently now with `-DDVI_N_LINE_BUFFERS=n` (default unchanged at 5).
+- The HSTX debug dump reports HDMI audio underruns **per second** next to the cumulative count. The cumulative counter runs from boot and includes the ~11025/s produced while browsing ROMs, so it says nothing about whether underruns are still happening.
+- `bld.sh` passes `$EXTRA_CMAKE_ARGS` through to cmake, so project-specific options can be set without changing the shared script.
 
 # v0.45
 
