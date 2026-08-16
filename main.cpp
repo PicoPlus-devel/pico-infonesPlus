@@ -1528,6 +1528,17 @@ int main()
 #if HSTX
     printf("HSTX freq: %d\n", clock_get_hz(clk_hstx) / 1000);
 #endif
+    {
+        // Which flash part is fitted decides how far the board can be overclocked,
+        // so log it: genuine Picos carry a 133 MHz Winbond, clones often a 104 MHz
+        // part that cannot keep up with clk_sys/2 at emulator speeds.
+        uint32_t jedec = Frens::storage_get_flash_jedec_id();
+        printf("Flash chip: JEDEC %06x (%s), %d MB\n",
+               jedec,
+               Frens::storage_get_flash_manufacturer_name((jedec >> 16) & 0xff),
+               (1 << (jedec & 0xff)) / (1024 * 1024));
+        printf("Flash freq: %d kHz\n", Frens::getFlashClockHz() / 1000);
+    }
     printf("Stack size: %d bytes\n", PICO_STACK_SIZE);
     printf("==========================================================================================\n");
     printf("Starting up...\n");
