@@ -21,6 +21,17 @@ Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (reco
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
+# v0.47
+
+## Display
+
+- **DVI mode sends a real DVI signal again.** Since v0.43 the **DVI** setting sent an HDMI signal without audio, which monitors with a DVI input reject outright — no picture at all on those displays ([#217](https://github.com/fhoedemakers/pico-infonesPlus/issues/217)). v0.42 was the last working version. HDMI mode is unchanged.
+- Some displays lose sync on a plain DVI signal — that is why v0.43 changed it. If yours does, use **HDMI** mode.
+
+## Developer
+
+- New `PICO_HDMI_DVI_USE_DATA_ISLANDS` in pico_shared's HDMI driver, default `0` (DVI 1.0). Set to `1` for the v0.43 signal. Only the `dvi_mode` branches are affected.
+
 # v0.46
 
 ## Menu
