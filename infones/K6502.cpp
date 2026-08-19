@@ -511,11 +511,19 @@ static void __not_in_flash_func(step)(int wClocks)
     // }
 
     /* Mesen2-style FDS auto-disk-insert: intercept BIOS $E445 (disk
-       verification routine) to auto-switch to the correct side. */
+       verification routine) to auto-switch to the correct side.
+       RP2350 only: FDS support is compiled out on RP2040, so main.cpp
+       never calls fdsParse() there and IsFDS can never become true. On
+       RP2040 this test cost ~6 cycles on *every* emulated instruction
+       (~0.19ms per frame at 252MHz), which was enough to push heavy
+       games past the DVI line deadline - see the red-flicker note in
+       K6502_rw.h. */
+#if PICO_RP2350
     if (IsFDS && PC == 0xE445)
     {
       fdsAutoInsertCheck();
     }
+#endif
 
     // Read an instruction
     byCode = K6502_Read(PC++);

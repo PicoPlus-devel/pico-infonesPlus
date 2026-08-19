@@ -28,9 +28,15 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - **DVI mode sends a real DVI signal again.** Since v0.43 the **DVI** setting sent an HDMI signal without audio, which monitors with a DVI input reject outright — no picture at all on those displays ([#217](https://github.com/fhoedemakers/pico-infonesPlus/issues/217)). v0.42 was the last working version. HDMI mode is unchanged.
 - Some displays lose sync on a plain DVI signal — that is why v0.43 changed it. If yours does, use **HDMI** mode.
 
+## Fixes
+
+- **RP2040: red flicker and a frame rate flipping between 60 and 30 are gone.** Two feature tests added in v0.41 sat on the 6502 core's hottest paths and cost ~3.5% of the frame budget — enough for heavier games such as *Prince of Persia* to miss the DVI scanline deadline, which paints the line red. NSF playback is unaffected.
+- A `.nes` file claiming **mapper 31** reports "unsupported" again instead of booting into the NSF player.
+
 ## Developer
 
 - New `PICO_HDMI_DVI_USE_DATA_ISLANDS` in pico_shared's HDMI driver, default `0` (DVI 1.0). Set to `1` for the v0.43 signal. Only the `dvi_mode` branches are affected.
+- A flag test in `K6502_Read`'s ROM branch or `step()`'s loop costs 1-2% of the RP2040 frame budget. Keep feature dispatch out of both.
 
 # v0.46
 

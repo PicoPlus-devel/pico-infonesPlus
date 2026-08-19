@@ -2,10 +2,13 @@
 /*                                                                   */
 /*  InfoNES_FDS.cpp : Famicom Disk System support                    */
 /*                                                                   */
-/*  Phase 1: detection, preflight gate (RP2350 + PSRAM + BIOS file + */
-/*  memory), buffer allocation, BIOS load. Mapper 20 init, drive     */
-/*  emulation, disk swap UI, save-data flush, audio and save-states  */
-/*  are added in later phases.                                       */
+/*  Detection and preflight gate (BIOS file + memory), buffer        */
+/*  allocation, BIOS load, Mapper 20 init, drive emulation, disk     */
+/*  swap UI, save-data sidecar, audio and save-states.               */
+/*                                                                   */
+/*  RP2350 only - main.cpp calls fdsParse() under #if PICO_RP2350.   */
+/*  PSRAM is not required: without it the drive runs in single-side  */
+/*  mode (fds_single_side_mode), rebuilding one side at a time.      */
 /*                                                                   */
 /*===================================================================*/
 

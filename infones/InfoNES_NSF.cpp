@@ -15,6 +15,7 @@
 #include "FrensHelpers.h"
 #include <cstring>
 #include <cstdio>
+#include <pico.h>   /* PICO_RP2350 - the RP2040 bank window below depends on it */
 
 #ifndef __not_in_flash_func
 #define __not_in_flash_func(name) name
@@ -88,6 +89,30 @@ static BYTE *NsfShadowLead = nullptr;
 static BYTE *NsfShadowTail = nullptr;
 static int NsfShadowLeadPage = -1;
 static int NsfShadowTailPage = -1;
+
+#if !PICO_RP2350
+/* RP2040 only: a contiguous 32KB SRAM image of $8000-$FFFF that
+   ROMBANK0..3 point at, so K6502_Read needs no `if (IsNSF)` test on its
+   hot ROM path (see the long comment in K6502_rw.h - that test was the
+   v0.41 RP2040 frame-rate regression). Bank writes copy the 4KB page in
+   rather than just repointing; NSF mode skips the whole PPU pixel
+   pipeline, so it has the budget the NES path does not. NsfWindowPage
+   suppresses the copy when a register is rewritten with the value it
+   already holds, which is the common case. */
+static BYTE *NsfWindow = nullptr;
+static int NsfWindowPage[8] = { -1, -1, -1, -1, -1, -1, -1, -1 };
+
+/* $FFFC-$FFFF live in bank register 7; rewrite them after every copy
+   that lands there. On RP2350 K6502_Read serves these directly. */
+static void NsfPatchVectors()
+{
+    if (!NsfWindow) return;
+    NsfWindow[0x7FFC] = 0x00;
+    NsfWindow[0x7FFD] = 0x41;  /* reset -> $4100 */
+    NsfWindow[0x7FFE] = 0x10;
+    NsfWindow[0x7FFF] = 0x41;  /* IRQ   -> $4110 */
+}
+#endif
 
 /* Build a 4KB shadow page that includes any required zero padding. */
 static void NsfBuildShadowPage(BYTE *dst, int page)
@@ -166,6 +191,19 @@ static void MapNsf_RenderScreen(BYTE byMode);
 static void __not_in_flash_func(NsfApplyBank)(int reg)
 {
     int page = NsfBankRegs[reg];
+#if !PICO_RP2350
+    if (!NsfWindow) return;
+    if (NsfWindowPage[reg] == page) return;
+    NsfWindowPage[reg] = page;
+    BYTE *dst = NsfWindow + reg * 0x1000;
+    if (page >= NsfPageCount)
+        memset(dst, 0, 0x1000);
+    else
+        NsfBuildShadowPage(dst, page);
+    if (reg == 7)
+        NsfPatchVectors();
+    return;
+#else
     if (page >= NsfPageCount)
     {
         NsfBank4K[reg] = NsfShadowZero;
@@ -184,6 +222,7 @@ static void __not_in_flash_func(NsfApplyBank)(int reg)
            Read directly from flash, no copy. */
         NsfBank4K[reg] = (BYTE *)(NsfRomData + page * 0x1000 - NsfLoadOffset);
     }
+#endif
 }
 
 /* Allocate (once) and rebuild the partial-page shadow buffers. Called
@@ -191,6 +230,14 @@ static void __not_in_flash_func(NsfApplyBank)(int reg)
    from a previous NSF in the same boot doesn't carry over. */
 static void NsfBuildShadows()
 {
+#if !PICO_RP2350
+    /* RP2040 uses the contiguous 32KB window instead of per-page shadow
+       buffers; force every register to re-copy for the new NSF. */
+    if (!NsfWindow) NsfWindow = (BYTE *)Frens::f_malloc(0x8000);
+    for (int i = 0; i < 8; i++)
+        NsfWindowPage[i] = -1;
+    return;
+#else
     if (!NsfShadowZero) NsfShadowZero = (BYTE *)Frens::f_malloc(0x1000);
     if (!NsfShadowLead) NsfShadowLead = (BYTE *)Frens::f_malloc(0x1000);
     if (!NsfShadowTail) NsfShadowTail = (BYTE *)Frens::f_malloc(0x1000);
@@ -223,6 +270,7 @@ static void NsfBuildShadows()
             NsfBuildShadowPage(NsfShadowTail, lastPage);
         }
     }
+#endif
 }
 
 /* Initial bank apply for all 8 registers. K6502 vectors at $FFFC-$FFFF
@@ -234,6 +282,17 @@ static void NsfApplyAllBanks()
     for (int i = 0; i < 8; i++)
         NsfApplyBank(i);
 
+#if !PICO_RP2350
+    /* RP2040: ROMBANK[] *is* the NSF read path - K6502_Read has no NSF
+       special case there. Fall back to ChrBuf if the 32KB window could
+       not be allocated, so stray reads still land in mapped memory. */
+    BYTE *base = NsfWindow ? NsfWindow : ChrBuf;
+    ROMBANK0 = base + 0x0000;
+    ROMBANK1 = base + 0x2000;
+    ROMBANK2 = base + 0x4000;
+    ROMBANK3 = base + 0x6000;
+    NsfPatchVectors();
+#else
     /* ROMBANK[] is unused in NSF mode (K6502_Read goes via NsfBank4K),
        but point it at ChrBuf anyway so any stray access from sprite-DMA
        paths or leftover mapper code lands in addressable memory rather
@@ -242,6 +301,7 @@ static void NsfApplyAllBanks()
     ROMBANK1 = ChrBuf + 0x2000;
     ROMBANK2 = ChrBuf + 0x4000;
     ROMBANK3 = ChrBuf + 0x6000;
+#endif
 }
 
 /*===================================================================*/
@@ -351,6 +411,12 @@ void nsfRelease()
     if (NsfShadowTail) { Frens::f_free(NsfShadowTail); NsfShadowTail = nullptr; }
     NsfShadowLeadPage = -1;
     NsfShadowTailPage = -1;
+
+#if !PICO_RP2350
+    if (NsfWindow) { Frens::f_free(NsfWindow); NsfWindow = nullptr; }
+    for (int i = 0; i < 8; i++)
+        NsfWindowPage[i] = -1;
+#endif
 
     /* Drop the bank pointers — NsfBank4K entries point into freed
        buffers or into NsfRomData (which is becoming invalid). */
