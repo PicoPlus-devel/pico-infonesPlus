@@ -1368,7 +1368,27 @@ void __not_in_flash_func(InfoNES_PostDrawLine)(int line)
     // Display frame rate
     if (settings.flags.displayFrameRate && line >= 8 && line < 16)
     {
-        char fpsString[2];
+        char fpsString[16];
+        int nchars = 0;
+        fpsString[nchars++] = '0' + (fps / 10);
+        fpsString[nchars++] = '0' + (fps % 10);
+#if HSTX
+        // Append the HSTX auto-resync count so display glitches are visible.
+        fpsString[nchars++] = ' ';
+        fpsString[nchars++] = 'R';
+        int resync = get_video_output_resync_count();
+        char digits[10];
+        int nd = 0;
+        do
+        {
+            digits[nd++] = '0' + (resync % 10);
+            resync /= 10;
+        } while (resync > 0 && nd < (int)sizeof(digits));
+        while (nd > 0 && nchars < (int)sizeof(fpsString))
+        {
+            fpsString[nchars++] = digits[--nd];
+        }
+#endif
         WORD *fpsBuffer =
 #if !HSTX
             currentLineBuf == nullptr ? currentLineBuffer_->data() + 40 : currentLineBuf + 40;
@@ -1377,14 +1397,11 @@ void __not_in_flash_func(InfoNES_PostDrawLine)(int line)
 #endif
         WORD fgc = NesPalette[48];
         WORD bgc = NesPalette[15];
-        fpsString[0] = '0' + (fps / 10);
-        fpsString[1] = '0' + (fps % 10);
 
         int rowInChar = line % 8;
-        for (auto i = 0; i < 2; i++)
+        for (auto i = 0; i < nchars; i++)
         {
-            char firstFpsDigit = fpsString[i];
-            char fontSlice = getcharslicefrom8x8font(firstFpsDigit, rowInChar);
+            char fontSlice = getcharslicefrom8x8font(fpsString[i], rowInChar);
             for (auto bit = 0; bit < 8; bit++)
             {
                 if (fontSlice & 1)
