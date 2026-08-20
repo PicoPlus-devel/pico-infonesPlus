@@ -1,5 +1,5 @@
 # CHANGELOG
-
+Fix for crashing RP2040 clone boards on boot. Regression fix for heavy screenflicker op RP2040 in some games.
 Beta **NES Zapper** (light gun) support on the custom PCB, a **Recently played** list of the last 20 games, no more reflashing a game that is already in flash on boards without PSRAM, and correct A/B buttons for **SNES controllers wired to a NES port**.
 
 
@@ -25,7 +25,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 
 ## Display
 
-- **DVI mode sends a real DVI signal again.** Since v0.43 the **DVI** setting sent an HDMI signal without audio, which monitors with a DVI input reject outright — no picture at all on those displays ([#217](https://github.com/fhoedemakers/pico-infonesPlus/issues/217)). v0.42 was the last working version. HDMI mode is unchanged.
+- **DVI mode sends a real DVI signal again.** Since v0.43 the **DVI** setting sent an HDMI signal without audio, which monitors with a DVI input reject outright — no picture at all on those displays ([#217](https://github.com/fhoedemakers/pico-infonesPlus/issues/217)). v0.42 was the last working version. HDMI mode is unchanged. Thanks to [javavi](https://github.com/javavi) for testing. 
 - Some displays lose sync on a plain DVI signal — that is why v0.43 changed it. If yours does, use **HDMI** mode.
 
 ## Fixes
@@ -33,6 +33,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - **RP2040: red flicker and a frame rate flipping between 60 and 30 are gone.** Two feature tests added in v0.41 sat on the 6502 core's hottest paths and cost ~3.5% of the frame budget — enough for heavier games such as *Prince of Persia* to miss the DVI scanline deadline, which paints the line red. NSF playback is unaffected.
 - A `.nes` file claiming **mapper 31** reports "unsupported" again instead of booting into the NSF player.
 - A flag test in `K6502_Read`'s ROM branch or `step()`'s loop costs 1-2% of the RP2040 frame budget. Keep feature dispatch out of both.
+- RP2040 Clone boards no longer crash upon booting the emulator.[#214](https://github.com/fhoedemakers/pico-infonesPlus/issues/214). Thanks to [chubunov](https://github.com/chubunov) for testing.
 
 # v0.46
 
