@@ -35,6 +35,9 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - A flag test in `K6502_Read`'s ROM branch or `step()`'s loop costs 1-2% of the RP2040 frame budget. Keep feature dispatch out of both.
 - RP2040 Clone boards no longer crash upon booting the emulator.[#214](https://github.com/fhoedemakers/pico-infonesPlus/issues/214). Thanks to [chubunov](https://github.com/chubunov) for testing.
 
+## Other
+- On HSTX boards, the framerate overlay now also shows a resync counter (`R<n>`) — the number of times the watchdog has had to resync the display since boot. A steadily rising count points to a display that is struggling to hold sync.
+
 # v0.46
 
 ## Menu
