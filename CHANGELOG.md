@@ -1,5 +1,5 @@
 # CHANGELOG
-Fix for crashing RP2040 clone boards on boot. Regression fix for heavy screenflicker op RP2040 in some games.
+Fix for crashing RP2040 clone boards on boot. Regression fix for heavy screenflicker op RP2040 in some games. Fix for no image on DVI monitors
 Beta **NES Zapper** (light gun) support on the custom PCB, a **Recently played** list of the last 20 games, no more reflashing a game that is already in flash on boards without PSRAM, and correct A/B buttons for **SNES controllers wired to a NES port**.
 
 
