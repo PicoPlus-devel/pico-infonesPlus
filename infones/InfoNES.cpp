@@ -544,6 +544,17 @@ int InfoNES_Reset()
   MapperBlobSize = nullptr;
   MapperSaveBlob = nullptr;
   MapperLoadBlob = nullptr;
+  // Mapper 31 in MapperTable is the synthetic NSF dispatch set up by the
+  // IsNSF branch above, not the real NSF-compilation multicart mapper. A
+  // .nes file whose header claims mapper 31 must still be reported as
+  // unsupported rather than booting into the NSF player with an
+  // uninitialised NsfHeader.
+  if (MapperNo == 31 && !IsNSF)
+  {
+    InfoNES_Error("Mapper #%d is unsupported.", MapperNo);
+    return -1;
+  }
+
   // Get Mapper Table Index
   for (nIdx = 0; MapperTable[nIdx].nMapperNo != -1; ++nIdx)
   {

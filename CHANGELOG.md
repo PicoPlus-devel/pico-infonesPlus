@@ -1,5 +1,5 @@
 # CHANGELOG
-
+Fix for crashing RP2040 clone boards on boot. Regression fix for heavy screenflicker on RP2040 in some games. Fix for no image on DVI monitors
 Beta **NES Zapper** (light gun) support on the custom PCB, a **Recently played** list of the last 20 games, no more reflashing a game that is already in flash on boards without PSRAM, and correct A/B buttons for **SNES controllers wired to a NES port**.
 
 
@@ -20,6 +20,23 @@ This can be fixed permanently with the [flash_config](https://github.com/fhoedem
 Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then requires erasing the flash with `universal_flash_nuke.uf2` first), and even after the fix these boards top out at 252 MHz — so the **Overclock** setting, and with it the VRC7 audio of *Lagrange Point (JP)*, cannot be used on them.
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
+
+# v0.47
+
+## Display
+
+- Fix regression introduced in v0.43 that caused DVI monitors to no longer show an image. Since v0.43 the **DVI** setting sent an HDMI signal without audio, which monitors with a DVI input reject outright ([#217](https://github.com/fhoedemakers/pico-infonesPlus/issues/217)). v0.42 was the last working version. HDMI mode is unchanged. Thanks to [javavi](https://github.com/javavi) for testing.
+
+## Fixes
+
+- RP2040 Clone boards no longer crash upon booting the emulator.[#214](https://github.com/fhoedemakers/pico-infonesPlus/issues/214). Thanks to [chubunov](https://github.com/chubunov) for testing.
+- Fixed a regression from v0.41 that made some games on RP2040 boards flicker red and drop from 60 to 30 fps. Two extra checks added in v0.41 slowed down the emulator core just enough for demanding games like *Prince of Persia* to fall behind. NSF playback was never affected.
+- Other RP2040 performance fixes.
+- A `.nes` file claiming **mapper 31** reports "unsupported" again instead of booting into the NSF player.
+
+
+## Other
+- On HSTX boards, the framerate overlay now also shows a resync counter (`R<n>`) — the number of times the watchdog has had to resync the display since boot. A steadily rising count points to a display that is struggling to hold sync.
 
 # v0.46
 

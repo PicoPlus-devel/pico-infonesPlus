@@ -78,6 +78,26 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
 
   if (wAddr >= 0x8000)
   {
+    /* This is the single hottest branch in the emulator: every opcode
+       fetch and most operand fetches land here. Anything added to it is
+       paid ~2x per emulated instruction, i.e. ~16000 times per frame.
+       On RP2040 the `if (IsNSF)` test below cost ~5 cycles a read
+       (~0.3ms per frame at 252MHz), and the code it added spread the
+       opcode dispatch in step() past the +-254 byte reach of a Thumb
+       conditional branch, so every `beq.n target` in the dispatch chain
+       became a `bne.n .+4; b.n target` pair on top of that. Together
+       with the FDS $E445 trap in K6502.cpp that came to roughly 0.6ms
+       of the 16.67ms frame budget - enough to make core0 miss the DVI
+       line deadline on heavy games, at which
+       point dvi::DMA::update() paints the scanline from listActiveError_
+       (solid red) and the frame rate halves to 30. That was the
+       Prince of Persia red flicker reported against v0.41.
+
+       So NSF gets its own read path only on RP2350, where there is
+       headroom. On RP2040, NSF mode materialises its 4KB banks into a
+       32KB SRAM window that ROMBANK0..3 point at (see NsfApplyBank in
+       InfoNES_NSF.cpp), which keeps this branch free of any NSF test. */
+#if PICO_RP2350
     if (IsNSF)
     {
       /* NSF reset/IRQ vectors are hardcoded so NsfBank4K can point
@@ -95,6 +115,7 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
       }
       return NsfBank4K[(wAddr - 0x8000) >> 12][wAddr & 0xFFF];
     }
+#endif
     return ROMBANK[(wAddr - 0x8000) >> 13][wAddr & 0x1fff];
   }
 
