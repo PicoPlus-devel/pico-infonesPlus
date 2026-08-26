@@ -1338,7 +1338,7 @@ void __not_in_flash_func(InfoNES_PreDrawLine)(int line)
     //    (*b)[319] = line + dvi_->getFrameCounter();
 
 #else
-    currentLineBuffer_ = hstx_getlineFromFramebuffer(line + 4); // Top Margin of 4 lines
+    currentLineBuffer_ = hstx_getlineFromFramebuffer(line);
     InfoNES_SetLineBuffer(currentLineBuffer_ + 32, 640);
 
 #endif
