@@ -21,6 +21,12 @@ Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (reco
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
+# v0.48
+
+## Fixes
+
+- Fixed a flickering band of wrong graphics across part of the screen in games that scroll between two name tables: *Final Fantasy*, *Zelda II*, *The Addams Family* and *Super Xevious*. The emulator kept drawing the wrong half of the map until partway down the frame.
+
 # v0.47
 
 ## Display

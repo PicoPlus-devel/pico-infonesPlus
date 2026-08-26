@@ -156,13 +156,19 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
       // Reset address latch
       PPU_Latch_Flag = 0;
 
-      // Make a Nametable 0 in V-Blank
-      if (PPU_Scanline >= SCAN_VBLANK_START && !(PPU_R0 & R0_NMI_VB))
-      {
-        PPU_R0 &= ~R0_NAME_ADDR;
-        PPU_NameTableBank = NAME_TABLE0;
-        PPU_Temp = PPU_Temp & 0xF3FF;
-      }
+      /* Original InfoNES cleared the name table select bits ($2000 bits 0-1,
+         and with them bits 10-11 of the "t" register) on any $2002 read taken
+         during V-Blank with NMI disabled. Reading $2002 has no such effect on
+         real hardware: it only returns the status bits, clears the V-Blank
+         flag and resets the $2005/$2006 write latch.
+
+         The hack breaks every game that programs $2000 and then reads $2002 to
+         reset the latch before writing the scroll registers -- Final Fantasy
+         does exactly that in its set-scroll routine. t bits 10-11 were wiped
+         after the game had just set them, the pre-render line copied t into v,
+         and the top of the frame was drawn from name table 0 until the game's
+         next (mid-frame) $2000 write restored the bit -- a flickering band of
+         the wrong half of the map across the top of the screen. */
       return byRet;
     }
     break;
