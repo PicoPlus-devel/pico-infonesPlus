@@ -1,6 +1,6 @@
 # CHANGELOG
-Fix for crashing RP2040 clone boards on boot. Regression fix for heavy screenflicker on RP2040 in some games. Fix for no image on DVI monitors
-Beta **NES Zapper** (light gun) support on the custom PCB, a **Recently played** list of the last 20 games, no more reflashing a game that is already in flash on boards without PSRAM, and correct A/B buttons for **SNES controllers wired to a NES port**.
+
+Fix for a flickering band of wrong graphics in scrolling games such as *Final Fantasy* and *Zelda II*, and for the picture sitting too low on HSTX boards.
 
 
 # General Info
@@ -26,6 +26,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 ## Fixes
 
 - Fixed a flickering band of wrong graphics across part of the screen in games that scroll between two name tables: *Final Fantasy*, *Zelda II*, *The Addams Family* and *Super Xevious*. The emulator kept drawing the wrong half of the map until partway down the frame.
+- On HSTX boards the picture sat four lines too low, leaving a wide black band at the top and none at the bottom. It is now centered again ([#225](https://github.com/fhoedemakers/pico-infonesPlus/pull/225)). Thanks to [zZmiz](https://github.com/zZmiz).
 
 # v0.47
 
