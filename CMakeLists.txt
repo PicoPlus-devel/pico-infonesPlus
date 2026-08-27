@@ -291,6 +291,24 @@ target_compile_definitions(${projectname} PRIVATE
     #HSTX_DEBUG=1
 )
 
+# ---------------------------------------------------------------------------
+# USB drive mode: the "USB drive mode" entry in the settings menu shows the SD
+# card on a PC as a mass storage device. RP2350 only. The device stack is
+# started when that screen opens and stopped when it closes, so nothing outside
+# it changes; when this is 0 no tinyusb device code is linked at all.
+# ---------------------------------------------------------------------------
+option(ENABLE_USB_MSC "Show the SD card on a PC over USB from the settings menu" ON)
+if(ENABLE_USB_MSC AND NOT PICO_PLATFORM STREQUAL "rp2040")
+    set(USB_MSC_ENABLED 1)
+else()
+    set(USB_MSC_ENABLED 0)
+endif()
+message(STATUS "USB drive mode (mass storage): ${USB_MSC_ENABLED}")
+target_compile_definitions(${projectname} PRIVATE FRENS_USB_MSC=${USB_MSC_ENABLED})
+if(USB_MSC_ENABLED)
+    target_link_libraries(${projectname} PRIVATE tinyusb_device pico_unique_id)
+endif()
+
 if(NOT PICO_PLATFORM STREQUAL "rp2040")
     message(STATUS "Using PICO_PIO_USE_GPIO_BASE=1 for non-rp2040 platforms.")
     target_compile_definitions(${projectname} PRIVATE
