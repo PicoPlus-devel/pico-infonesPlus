@@ -1,6 +1,6 @@
 # CHANGELOG
 
-Fix for a flickering band of wrong graphics in scrolling games such as *Final Fantasy* and *Zelda II*, and for the picture sitting too low on HSTX boards.
+New USB drive mode: show the SD card on your computer over USB straight from the settings menu. Plus a fix for a flickering band of wrong graphics in scrolling games such as *Final Fantasy* and *Zelda II*, and for the picture sitting too low on HSTX boards.
 
 
 # General Info
@@ -22,6 +22,11 @@ Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (reco
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
 # v0.48
+
+## New
+
+- **USB drive mode**: the settings menu can now show the SD card on your computer over USB, so you can add or remove games without taking the card out. Open the menu with SELECT from the game list, pick *USB drive mode*, then eject the drive on your computer or press B when you are done. It is not available while a game is running.
+- On boards where controllers plug into the console's own USB port, that same port is the one you connect to the computer, so a USB controller cannot be used in this mode: press B on a controller in the NES port, or eject from the computer. The console restarts afterwards. On RP2040 boards the screen also goes black while the card is mounted; the menu explains this first and lets you back out.
 
 ## Fixes
 
