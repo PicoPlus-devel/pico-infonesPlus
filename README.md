@@ -9,6 +9,7 @@
 - **NES Emulation** – Execute NES ROM files directly from an SD card
 - **SD Card Menu System** – Browse and launch games from an on-screen menu interface
 - **Recently Played List** – The last 20 games you started, one button press away in the menu ([details](#recently-played-games))
+- **USB Drive Mode** – Present the SD card to a computer as a USB drive from the settings menu, so games can be added or removed without taking the card out ([details](#usb-drive-mode))
 - **Dual Controller Support** – Two simultaneous controllers for multiplayer gameplay ([details](#about-two-player-games))
 - **NES Zapper (light gun)** – Beta support in controller port 2 of the [custom PCB](#nes-zapper-light-gun), using LCD-lag-corrected ROM patches and a third-party gun such as the Tomee Zapp Gun
 - **Save State Management** – Automatic battery-backed SRAM persistence and manual save states
@@ -1121,8 +1122,9 @@ running. Not every entry is available on every board or in every situation.
 | FDS Auto Swap Disk side | Swap the disk side automatically when the game asks for it. Off by default. FDS games only. |
 | FDS Auto Insert Disk 1 On Start | Insert disk 1 automatically at start. On by default. FDS games only. |
 | Overclock | Raise the CPU clock from 252 MHz to 378 MHz. Only on HSTX boards with PSRAM, and currently only needed for *Lagrange Point (JP)*. Menu only, not available in-game. |
-| Enter BOOTSEL Mode | Reboot into BOOTSEL so you can flash new firmware. |
 | Controller Test | Show a gamepad graphic that follows the controller you last pressed a button on, plus a list of connected input sources. Useful for checking wiring and button mappings. Hold SELECT + START for 2 seconds to exit. |
+| Enter BOOTSEL Mode | Reboot into BOOTSEL so you can flash new firmware. |
+| USB Drive Mode | Show the SD card on a computer as a USB drive, so games can be added or removed without taking the card out. See [USB drive mode](#usb-drive-mode). Menu only, not available in-game. |
 | Return to emulator selection | Go back to the emulator picker. Only present in [pico-bootLoader](#running-under-pico-bootloader) builds. |
 
 > [!NOTE]
@@ -1250,6 +1252,43 @@ For games which support it, battery-backed save RAM is stored in the `/SAVES` fo
 
 > [!CAUTION]
 > The save RAM is only written back to the SD card when you quit the game properly: press **SELECT + START** to open the settings menu, then choose **Quit game**. Powering off or resetting the board while the game is running loses everything since the last save.
+
+***
+
+# USB drive mode
+
+USB drive mode presents the SD card to a computer as a USB mass storage device, so games can be added or
+removed without taking the card out of the console. Connect the console to the computer, open the
+[settings menu](#settings-menu) with SELECT from the game list and choose **USB Drive Mode**. The card
+appears on the computer as a removable drive.
+
+The entry is only offered when the settings menu is opened from the game list. It is not available while
+a game is running: the running game holds its save files open and its ROM is mapped out of flash, and
+letting the computer rewrite the card underneath that would corrupt both.
+
+When you are finished, eject the drive on the computer. The console notices this and leaves USB drive
+mode by itself. Pressing B on the console leaves as well, for when no computer is attached. The game
+list is re-read on the way out, so files added from the computer appear without having to restart.
+
+> [!NOTE]
+> Transfers are slow. The console is a USB full-speed device and reaches the card a sector at a time
+> over SPI, so copying is far slower than reading the card in a card reader. USB drive mode is meant
+> for adding or replacing a few games. For filling a card, or for copying a large amount of data, take
+> the card out and use a card reader.
+
+Behaviour depends on where controllers are connected on your board.
+
+| Board | Behaviour |
+| ----- | --------- |
+| Controllers on a separate USB port (boards built with PIO USB, such as the Fruit Jam) | The console's own USB port is free, so controllers keep working and the screen stays on. The menu returns to the game list when you are done. |
+| Controllers on the console's own USB port | That port is the one connected to the computer, so a USB controller cannot be used while the card is mounted. Press B on a controller in the NES port, or eject the drive on the computer. The console restarts afterwards. |
+| RP2040 boards | As above, and the screen is switched off for as long as the card is mounted. These boards cannot drive the video output while the computer is reading the card. The menu explains this first and lets you go back without mounting anything. |
+| SpotPear HDMI board | This board has no NES controller port, so with the USB port connected to the computer there is no button to press at all. Eject the drive on the computer to return. If no computer ever mounts the card, the console returns to the menu by itself after 20 seconds. |
+
+> [!CAUTION]
+> Eject the drive on the computer rather than pressing B. Ejecting makes the computer write out
+> anything it still had cached, and the console leaves USB drive mode on its own once it has. Pressing
+> B while the computer still has the drive open can leave files on the card incomplete.
 
 ***
 
@@ -1468,6 +1507,8 @@ Adafruit Feather DVI - RP2040 support by [PaintYourDragon](https://github.com/Pa
 XInput driver: https://github.com/Ryzee119/tusb_XInput by [Ryzee119](https://github.com/Ryzee119)
 
 FatFS driver: https://github.com/elehobica/pico_fatfs by [elehobica](https://github.com/elehobica)
+
+USB drive mode is derived from [Adafruit_ColecoJam](https://github.com/cogliano/Adafruit_ColecoJam) by [Dan Cogliano](https://github.com/cogliano)
 
 PSRAM: [AndrewCapon](https://github.com/AndrewCapon/PicoPlusPsram)
 
