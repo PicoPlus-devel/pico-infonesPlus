@@ -1,9 +1,9 @@
 [submodule "pico_lib"]
 	path = pico_lib
-	url = https://github.com/fhoedemakers/pico_lib.git
+	url = https://github.com/PicoPlus-devel/pico_lib.git
 [submodule "tusb_xinput"]
 	path = tusb_xinput
-	url = https://github.com/fhoedemakers/tusb_xinput.git
+	url = https://github.com/PicoPlus-devel/tusb_xinput.git
 [submodule "pico_shared"]
 	path = pico_shared
-	url = https://github.com/fhoedemakers/pico_shared.git
+	url = https://github.com/PicoPlus-devel/pico_shared.git
