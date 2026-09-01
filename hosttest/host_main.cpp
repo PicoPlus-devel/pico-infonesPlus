@@ -15,8 +15,8 @@
 // Matches the RP2350 framebuffer path in main.cpp:1294-1308: each scanline's
 // WORD buffer is set to point directly into the 320*240 Frens::framebuffer
 // at line*320 + 32. PostDrawLine is a no-op — pixels already live in the
-// framebuffer. dump_ppm reads the centre 256 columns and converts RGB565
-// to RGB888.
+// framebuffer. dump_ppm reads the centre 256 columns and unpacks them to
+// RGB888 the same way the picoDVI build's CC() macro does.
 
 #include <cstdio>
 #include <cstdlib>
@@ -40,10 +40,11 @@
 uintptr_t ROM_FILE_ADDR = 0;
 
 // ----------------------------------------------------------------------
-// NES palette — 64 entries, RGB565. Verbatim from the canonical NES
-// palette used by main.cpp:140-148 (those are pre-RGB565 values that the
-// device wraps in a CC() macro to pack into RGB444; we keep them as
-// RGB565 here so dump_ppm can expand cleanly).
+// NES palette — 64 entries, verbatim from the canonical table in
+// main.cpp:161-169. These are the raw pre-CC() words the picoDVI build feeds
+// to its RGB444 packing macro: red in bits 11-14, green in bits 6-9, blue in
+// bits 1-4 (the remaining low bits are dropped by CC()). dump_ppm unpacks
+// them the same way, so host frames match the picoDVI output.
 // ----------------------------------------------------------------------
 const WORD NesPalette[64] = {
     0x39ce, 0x1071, 0x0015, 0x2013, 0x440e, 0x5402, 0x5000, 0x3c20,
@@ -95,6 +96,7 @@ static struct {
     int press_start;        // tap START 10 frames from this frame
     int hold_a;             // autofire A from this frame on
     int dump_regs;          // print PPU regs every 100 frames
+    int frame_crc;          // print a CRC32 of every rendered frame
     int dump_vram;          // dump PPURAM/SPRRAM at exit
     int fds_disk_side;      // -1 = no override
     KeyEvent keys[32];
@@ -123,10 +125,15 @@ static void dump_ppm(int frame)
         const WORD *src = &Frens::framebuffer[y * SCREENWIDTH + 32];
         for (int x = 0; x < W; x++) {
             uint16_t p = src[x];
+            // Unpack exactly like the device's CC() macro in main.cpp reads
+            // these table entries: red bits 11-14, green bits 6-9, blue bits
+            // 1-4, i.e. the RGB444 the picoDVI path actually emits. Bit 15 is
+            // the emulator's backdrop marker (PalTable | 0x8000) and is
+            // ignored here, exactly as the display hardware ignores it.
             uint8_t rgb[3] = {
-                (uint8_t)(((p >> 11) & 0x1F) << 3),
-                (uint8_t)(((p >>  5) & 0x3F) << 2),
-                (uint8_t)(((p      ) & 0x1F) << 3),
+                (uint8_t)(((p >> 11) & 0xF) * 17),
+                (uint8_t)(((p >>  6) & 0xF) * 17),
+                (uint8_t)(((p >>  1) & 0xF) * 17),
             };
             fwrite(rgb, 1, 3, f);
         }
@@ -256,6 +263,13 @@ int InfoNES_LoadFrame()
         dump_ppm(g_frame);
     if (cfg.dump_regs && g_frame > 0 && g_frame % 100 == 0)
         dump_regs_snapshot();
+    if (cfg.frame_crc) {
+        // One line per frame, so two runs can be diffed to find the exact
+        // frame where behaviour diverges without dumping every image.
+        printf("CRC %5d %08X\n", g_frame,
+               crc32_buf(Frens::framebuffer,
+                         SCREENWIDTH * 240 * sizeof(WORD), 0));
+    }
 
     // Decide input for this frame.
     uint8_t mask = 0;
@@ -312,6 +326,7 @@ int main(int argc, char **argv)
     cfg.press_start    = get_env_int("NES_PRESS_START", -1);
     cfg.hold_a         = get_env_int("NES_HOLD_A",      -1);
     cfg.dump_regs      = get_env_int("NES_DUMP_REGS",    0);
+    cfg.frame_crc      = get_env_int("NES_FRAME_CRC",    0);
     cfg.dump_vram      = get_env_int("NES_DUMP_VRAM",    0);
     cfg.fds_disk_side  = get_env_int("NES_FDS_DISK_SIDE", -1);
     parse_keys_env();

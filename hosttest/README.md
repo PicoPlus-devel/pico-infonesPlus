@@ -81,6 +81,7 @@ save files (`*.SAV`) are written under `$NES_FAT_ROOT/saves/`.
 | `NES_HOLD_A=<frame>` | autofire button A (4 frames on / 4 off) from that frame on |
 | `NES_REGION=ntsc\|pal\|dendy` | override `InfoNES_DetectRegion` (CRC lookup still runs, but result is overridden) |
 | `NES_DUMP_REGS=1` | print PPU R0..R7, scanline, PAD1 latch, mapper every 100 frames |
+| `NES_FRAME_CRC=1` | print `CRC <frame> <crc32>` for every rendered frame |
 | `NES_DUMP_VRAM=1` | write `ppuram.bin` (16 KB) and `sprram.bin` (256 B) to outdir at exit |
 | `NES_FDS_DISK_SIDE=<N>` | (FDS only) call `fdsRequestSwap(N)` once at startup |
 | `NES_FAT_ROOT=<dir>` | root directory for FatFs paths; default `.` |
@@ -106,6 +107,14 @@ UP+A at frame 200 for 10 frames each.
 - Host runs are fully deterministic: no PSRAM latency, no input-timing
   variation. A bug that is *intermittent* on the device usually shows up
   here as its always-broken variant.
+- `NES_FRAME_CRC=1` is the cheap way to find where two builds diverge --
+  diff the two CRC streams instead of dumping thousands of images. Running
+  the *same* tree at `-O1` and `-O2` and diffing the streams is also a good
+  undefined-behaviour probe: the core should be bit-identical either way, and
+  it was not until the out-of-range `NesPalette[]` index was fixed.
+- Frames are unpacked the way the picoDVI build's `CC()` macro reads the
+  palette table (RGB444), so host output matches a picoDVI board. HSTX boards
+  use a different palette table in `main.cpp`, so their colours differ.
 - Audio is stubbed entirely (`InfoNES_SoundOutput` is a sink).
 - Zapper support compiles out (`ZAPPER_D3`/`ZAPPER_D4` are undefined here, so
   `ZAPPER_SUPPORTED` is 0), and `$4017` reads behave exactly as before.

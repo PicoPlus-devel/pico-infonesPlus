@@ -1,6 +1,6 @@
 # CHANGELOG
 
-New USB drive mode: show the SD card on your computer over USB straight from the settings menu. Plus a fix for a flickering band of wrong graphics in scrolling games such as *Final Fantasy* and *Zelda II*, and for the picture sitting too low on HSTX boards.
+Graphics and colour fixes for *Mike Tyson's Punch-Out!!*.
 
 
 # General Info
@@ -20,6 +20,13 @@ This can be fixed permanently with the [flash_config](https://github.com/fhoedem
 Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then requires erasing the flash with `universal_flash_nuke.uf2` first), and even after the fix these boards top out at 252 MHz — so the **Overclock** setting, and with it the VRC7 audio of *Lagrange Point (JP)*, cannot be used on them.
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
+
+# v0.49
+
+## Fixes
+
+- Fixed the scrambled line of big letters on the boxer name screens in *Mike Tyson's Punch-Out!!*, and stray specks on the title screen of *Fire Emblem Gaiden (JP)*. Both games switch graphics banks from their sprites, which the emulator was ignoring.
+- Fixed wrong colours in games that set their palette in a way the emulator mishandled, among them *Mike Tyson's Punch-Out!!*, *Indiana Jones and the Last Crusade* and *Lunar Pool*. The same bug also made those games look different on different boards.
 
 # v0.48
 

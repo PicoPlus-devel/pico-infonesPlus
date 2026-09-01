@@ -284,6 +284,16 @@ void (*MapperVSync)();
 void (*MapperHSync)();
 /* Callback at PPU read/write */
 void (*MapperPPU)(WORD wAddr); // mapper 96だけ？
+/* Callback at sprite pattern fetch - MMC2/MMC4 CHR latch only, else null */
+void (*MapperSprPPU)(WORD wAddr);
+/* False when MapperPPU is the do-nothing Map0_PPU stub, which is the case for
+   all but a handful of mappers. The background tile loop below consults this
+   instead of making ~33 indirect calls per scanline into a flash-resident
+   no-op - on RP2040 that call and its argument setup are pure loss. */
+bool MapperPPUActive;
+/* Set whenever OAM or the $2000 sprite bits change, so the MMC2/MMC4
+   sprite-fetch trigger list gets rebuilt before it is next used. */
+bool SprLatchDirty;
 /* Callback at Rendering Screen 1:BG, 0:Sprite */
 void (*MapperRenderScreen)(BYTE byMode);
 
@@ -544,6 +554,9 @@ int InfoNES_Reset()
   MapperBlobSize = nullptr;
   MapperSaveBlob = nullptr;
   MapperLoadBlob = nullptr;
+  // Only the MMC2/MMC4 CHR latch (mappers 9 and 10) needs to see sprite
+  // pattern fetches; every other mapper leaves this null and pays nothing.
+  MapperSprPPU = nullptr;
   // Mapper 31 in MapperTable is the synthetic NSF dispatch set up by the
   // IsNSF branch above, not the real NSF-compilation multicart mapper. A
   // .nes file whose header claims mapper 31 must still be reported as
@@ -571,6 +584,10 @@ int InfoNES_Reset()
 
   // Set up a mapper initialization function
   MapperTable[nIdx].pMapperInit();
+
+  // Mappers that leave MapperPPU at the Map0_PPU stub want no per-tile
+  // callback at all; skip the indirect call for them (see MapperPPUActive).
+  MapperPPUActive = (MapperPPU != Map0_PPU);
 
   /*-------------------------------------------------------------------*/
   /*  Reset CPU                                                        */
@@ -958,6 +975,10 @@ int __not_in_flash_func(InfoNES_HSync)()
 
     // Get position of sprite #0
     InfoNES_GetSprHitY();
+
+    // Force a rebuild of the MMC2/MMC4 sprite-fetch trigger list even if no
+    // OAM write was seen (a game may leave OAM untouched for a whole frame).
+    SprLatchDirty = true;
   }
   else if (PPU_Scanline == SCAN_UNKNOWN_START)
   {
@@ -1038,6 +1059,106 @@ namespace
       spr += 1;
 #endif
     } while (spr < sprEnd);
+  }
+
+  /* MMC2/MMC4 CHR latch, sprite side.
+
+     Real PxROM/FxROM hardware flips its CHR latch on sprite pattern fetches
+     as well as background fetches, and Punch-Out!! depends on it: OAM holds
+     blank trigger sprites (tile $FD / $FE) whose only job is to switch the
+     4K CHR window part-way down the screen. Without this the big "MIKE
+     TYSON" letters below the trigger line are drawn from the wrong bank.
+
+     Scanning all 64 OAM entries on every scanline turned out to cost more
+     than it is worth (64 * 232 range tests a frame, which on RP2040 is worth
+     more than the whole latch fix saves), so the trigger sprites are
+     collected into a short event list and each scanline only walks that. The
+     list is rebuilt lazily: SprLatchDirty is raised by the $2003/$2004/$4014
+     OAM paths and by $2000 writes, and once per frame regardless, so a game
+     that rewrites OAM part-way down the screen still gets fresh triggers
+     while the common once-per-frame OAM DMA costs a single rebuild.
+
+     Order matters: the PPU walks OAM forwards and the last trigger of a
+     scanline wins, so the list is built in OAM order and walked in order.
+     Unlike the hardware this ignores the 8-sprites-per-line fetch limit -
+     a trigger that hardware would never reach because eight earlier sprites
+     already filled the line would still fire here. A game relying on that
+     would be broken on real hardware too, so nothing does.
+
+     Only bits 4-13 of the address survive the mapper's mask, so within a
+     tile the row only matters for picking the half of an 8x16 sprite. */
+  struct SprLatchEvent
+  {
+    BYTE yStart; // first scanline this pattern is fetched for
+    BYTE yEnd;   // one past the last
+    WORD addr;   // pattern address, as the mapper hook wants it
+  };
+  constexpr int SPR_LATCH_MAX = 16;
+  SprLatchEvent sprLatchEvents[SPR_LATCH_MAX];
+  int sprLatchCount;
+
+  // Is this tile index one of the two the MMC2/MMC4 latch reacts to?
+  inline bool isLatchTile(int tile) { return tile == 0xfd || tile == 0xfe; }
+
+  void sprLatchBuild()
+  {
+    SprLatchDirty = false;
+    sprLatchCount = 0;
+
+    const int spHeight = PPU_SP_Height;
+    const WORD table8x8 = (PPU_R0 & R0_SP_ADDR) ? 0x1000 : 0x0000;
+    const bool big = (PPU_R0 & R0_SP_SIZE) != 0;
+
+    for (const BYTE *spr = SPRRAM; spr < SPRRAM + 64 * 4; spr += 4)
+    {
+      const int y = spr[SPR_Y] + 1;
+      if (y + spHeight > 256)
+        continue; // Never fetched
+
+      const int ch = spr[SPR_CHR];
+
+      if (!big)
+      {
+        if (!isLatchTile(ch))
+          continue;
+        if (sprLatchCount == SPR_LATCH_MAX)
+          break;
+        sprLatchEvents[sprLatchCount++] = {
+            (BYTE)y, (BYTE)(y + spHeight), (WORD)(table8x8 | (ch << 4))};
+        continue;
+      }
+
+      /* 8x16: the two halves are separate tiles, and a vertical flip swaps
+         which half covers which scanlines. Emit an event per triggering
+         half so the row range carries that distinction. */
+      const int flip = (spr[SPR_ATTR] & SPR_ATTR_V_FLIP) ? 1 : 0;
+      const WORD table = (WORD)((ch & 1) << 12);
+      for (int half = 0; half < 2; ++half)
+      {
+        const int tile = (ch & 0xfe) | half;
+        if (!isLatchTile(tile))
+          continue;
+        if (sprLatchCount == SPR_LATCH_MAX)
+          break;
+        const int top = y + ((half ^ flip) ? 8 : 0);
+        sprLatchEvents[sprLatchCount++] = {
+            (BYTE)top, (BYTE)(top + 8), (WORD)(table | (tile << 4))};
+      }
+    }
+  }
+
+  /* Hardware fetches the sprite patterns for line N+1 during line N's
+     cycles 257-320, after that line's background fetches, so a trigger
+     first takes effect on the next line - the caller passes
+     PPU_Scanline + 1. */
+  void __not_in_flash_func(sprLatchLine)(int line)
+  {
+    for (int i = 0; i < sprLatchCount; ++i)
+    {
+      const SprLatchEvent &e = sprLatchEvents[i];
+      if (line >= e.yStart && line < e.yEnd)
+        MapperSprPPU(e.addr);
+    }
   }
 }
 
@@ -1123,6 +1244,13 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     //
     const int patternTableIdBG = PPU_R0 & R0_BG_ADDR ? 1 : 0;
     const int bankOfsBG = patternTableIdBG << 2;
+    /* PATTBL() of a background tile fetch reduces to this base OR'd with
+       (tile << 4) - the tile index the renderer has already loaded. Building
+       it that way saves re-reading the name table byte and rebuilding a
+       ChrBuf pointer just to subtract ChrBuf off it again, ~33 times per
+       scanline. Only mappers that actually watch PPU fetches (MMC2/MMC4 CHR
+       latch, mapper 96) pay the call at all - see MapperPPUActive. */
+    const int bgPatBase = (patternTableIdBG << 12) | (yOfsModBG << 1);
 
     /*-------------------------------------------------------------------*/
     /*  Rendering of the block of the left end                           */
@@ -1189,7 +1317,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 #endif
 
     // Callback at PPU read/write
-    MapperPPU(PATTBL(pbyChrData));
+    if (MapperPPUActive)
+      MapperPPU(bgPatBase | (*pbyNameTable << 4));
 
     ++nX;
     ++pbyNameTable;
@@ -1241,6 +1370,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[6] = readPal((pat1 >> 0) & 6);
       pPoint[7] = readPal((pat0 >> 0) & 6);
       pPoint += 8;
+      return ch;
     };
 
     for (; nX < 32; ++nX)
@@ -1259,12 +1389,12 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[7] = pPalTbl[pbyChrData[7]];
       pPoint += 8;
 #else
-      putBG(nX);
+      const int chBG = putBG(nX);
 #endif
 
       // Callback at PPU read/write
-      pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-      MapperPPU(PATTBL(pbyChrData));
+      if (MapperPPUActive)
+        MapperPPU(bgPatBase | (chBG << 4));
 
       ++pbyNameTable;
     }
@@ -1295,12 +1425,12 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[7] = pPalTbl[pbyChrData[7]];
       pPoint += 8;
 #else
-      putBG(nX);
+      const int chBG = putBG(nX);
 #endif
 
       // Callback at PPU read/write
-      pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-      MapperPPU(PATTBL(pbyChrData));
+      if (MapperPPUActive)
+        MapperPPU(bgPatBase | (chBG << 4));
 
       ++pbyNameTable;
     }
@@ -1368,8 +1498,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 #endif
 
     // Callback at PPU read/write
-    pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-    MapperPPU(PATTBL(pbyChrData));
+    if (MapperPPUActive)
+      MapperPPU(bgPatBase | (*pbyNameTable << 4));
 
     /*-------------------------------------------------------------------*/
     /*  Backgroud Clipping                                               */
@@ -1661,6 +1791,15 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       PPU_R2 |= R2_MAX_SP; // Set a flag of maximum sprites on scanline
 
     util::WorkMeterMark(MARKER_SPRITE);
+  }
+
+  /* MMC2/MMC4 CHR latch, sprite side. See sprLatchLine above. */
+  if (MapperSprPPU)
+  {
+    if (SprLatchDirty)
+      sprLatchBuild();
+    if (sprLatchCount && (PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)))
+      sprLatchLine(PPU_Scanline + 1);
   }
 }
 

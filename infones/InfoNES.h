@@ -269,6 +269,16 @@ extern void (*MapperVSync)();
 extern void (*MapperHSync)();
 /* Callback at PPU read/write */
 extern void (*MapperPPU)(WORD wAddr);
+/* Callback at sprite pattern fetch. Real MMC2/MMC4 hardware flips its CHR
+   latch on sprite fetches as well as background fetches, and Punch-Out!!
+   relies on it (blank trigger sprites holding tile $FD/$FE). Mappers 9 and
+   10 are the only ones that install this; it stays null everywhere else so
+   the sprite path costs one null test per scanline. */
+extern void (*MapperSprPPU)(WORD wAddr);
+/* False when MapperPPU is the Map0_PPU no-op stub - see InfoNES.cpp. */
+extern bool MapperPPUActive;
+/* Raised when OAM or the $2000 sprite bits change - see InfoNES.cpp. */
+extern bool SprLatchDirty;
 /* Callback at Rendering Screen 1:BG, 0:Sprite */
 extern void (*MapperRenderScreen)(BYTE byMode);
 
