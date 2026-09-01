@@ -33,7 +33,7 @@ g++ -O1 -g -fsanitize=address -std=gnu++17 \
   -DPICO_RP2350=1 -DNDEBUG -DPICO_NO_HARDWARE=1 \
   -I hosttest/shim -I infones -I pico_lib -I pico_shared -I . \
   -o hosttest/nes_host \
-  hosttest/host_main.cpp hosttest/stubs.cpp \
+  hosttest/host_main.cpp hosttest/stubs.cpp state.cpp \
   infones/InfoNES.cpp infones/K6502.cpp infones/InfoNES_Mapper.cpp \
   infones/InfoNES_pAPU.cpp infones/InfoNES_pAPU_Vrc7.cpp infones/InfoNES_Region.cpp \
   infones/InfoNES_NSF.cpp infones/InfoNES_FDS.cpp
@@ -85,6 +85,21 @@ save files (`*.SAV`) are written under `$NES_FAT_ROOT/saves/`.
 | `NES_DUMP_VRAM=1` | write `ppuram.bin` (16 KB) and `sprram.bin` (256 B) to outdir at exit |
 | `NES_FDS_DISK_SIDE=<N>` | (FDS only) call `fdsRequestSwap(N)` once at startup |
 | `NES_FAT_ROOT=<dir>` | root directory for FatFs paths; default `.` |
+| `NES_SAVE_STATE=<frame>` | call `Emulator_SaveState` at that frame |
+| `NES_LOAD_STATE=<frame>` | call `Emulator_LoadState` at that frame |
+| `NES_STATE_PATH=<file>` | state file for the two above; default `<outdir>/host.state` |
+
+`NES_SAVE_STATE` / `NES_LOAD_STATE` print `SAVESTATE frame=N rc=R` and
+`LOADSTATE frame=N rc=R`, so `state.cpp` can be exercised without a board. Note
+that FatFs paths are rewritten through `$NES_FAT_ROOT`, so pass `NES_FAT_ROOT=/`
+when the state path is absolute. To check that a load truly restores rather than
+merely returning 0, save at frame A in one run and load at frame B in a second,
+then confirm the second run's frame B+k CRC matches the first run's A+k:
+
+```sh
+NES_FAT_ROOT=/ NES_SAVE_STATE=250 NES_FRAME_CRC=1 ./hosttest/nes_host rom.nes 400 0 out >a.txt
+NES_FAT_ROOT=/ NES_LOAD_STATE=300 NES_FRAME_CRC=1 ./hosttest/nes_host rom.nes 400 0 out >b.txt
+```
 
 Button mask (per joypad, hex):
 

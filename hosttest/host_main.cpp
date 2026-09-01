@@ -33,6 +33,7 @@
 #include "InfoNES_Region.h"
 #include "InfoNES_FDS.h"
 #include "FrensHelpers.h"
+#include "state.h"
 
 // The real FrensHelpers.h declares this; the device build sets it from the
 // flash-loaded ROM address. We own it on host and point it at the in-memory
@@ -99,6 +100,9 @@ static struct {
     int frame_crc;          // print a CRC32 of every rendered frame
     int dump_vram;          // dump PPURAM/SPRRAM at exit
     int fds_disk_side;      // -1 = no override
+    int save_state;         // frame to call Emulator_SaveState at, -1 = never
+    int load_state;         // frame to call Emulator_LoadState at, -1 = never
+    std::string state_path; // file the two above use
     KeyEvent keys[32];
     int keys_n;
 } cfg;
@@ -271,6 +275,17 @@ int InfoNES_LoadFrame()
                          SCREENWIDTH * 240 * sizeof(WORD), 0));
     }
 
+    // Save / load state exercise. Saving at frame A and loading at frame B
+    // should make every frame from B onward match a run that never diverged.
+    if (cfg.save_state == g_frame) {
+        int rc = Emulator_SaveState(cfg.state_path.c_str());
+        printf("SAVESTATE frame=%d rc=%d\n", g_frame, rc);
+    }
+    if (cfg.load_state == g_frame) {
+        int rc = Emulator_LoadState(cfg.state_path.c_str());
+        printf("LOADSTATE frame=%d rc=%d\n", g_frame, rc);
+    }
+
     // Decide input for this frame.
     uint8_t mask = 0;
     if (cfg.press_start >= 0 &&
@@ -329,6 +344,12 @@ int main(int argc, char **argv)
     cfg.frame_crc      = get_env_int("NES_FRAME_CRC",    0);
     cfg.dump_vram      = get_env_int("NES_DUMP_VRAM",    0);
     cfg.fds_disk_side  = get_env_int("NES_FDS_DISK_SIDE", -1);
+    cfg.save_state     = get_env_int("NES_SAVE_STATE",   -1);
+    cfg.load_state     = get_env_int("NES_LOAD_STATE",   -1);
+    {
+        const char *p = getenv("NES_STATE_PATH");
+        cfg.state_path = p ? p : (cfg.outdir + "/host.state");
+    }
     parse_keys_env();
 
     // Load ROM into memory.

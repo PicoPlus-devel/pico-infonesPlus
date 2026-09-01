@@ -63,6 +63,11 @@ extern BYTE Map5_Chr_Upper;
 /* Mapper 85 (VRC7) 256KB CHR RAM, allocated on first init via f_malloc. */
 extern BYTE *Map85_Chr_Ram;
 
+/* Mapper 30 (UNROM 512) 32KB CHR RAM, allocated on first init via f_malloc.
+   Saved directly to the state file by state.cpp, not through the mapper blob. */
+#define MAP30_CHR_RAM_SIZE 0x8000
+extern BYTE *Map30_Chr_Ram;
+
 /*-------------------------------------------------------------------*/
 /*  Table of Mapper initialize function                              */
 /*-------------------------------------------------------------------*/

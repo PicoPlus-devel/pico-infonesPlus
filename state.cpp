@@ -23,6 +23,7 @@
 #include "K6502.h"
 #include "ff.h"
 #include <cstring>
+#include <cstdio>
 #include <memory>
 #include "FrensHelpers.h"
 
@@ -161,6 +162,9 @@ extern DWORD PAD2_Bit;
 
 // Mirroring function
 extern void InfoNES_Mirroring(int nType);
+
+// Mapper 30 (UNROM 512) keeps its 32KB CHR RAM in its own buffer, not in PPURAM
+extern BYTE *Map30_Chr_Ram;
 
 /* -------- Optional mapper and APU blob hooks -------- */
 extern "C"
@@ -322,18 +326,27 @@ struct SaveCore
 
 /* -------- Helpers -------- */
 
-// Return base pointer for CHR addressing (VROM if present else PPURAM for CHR RAM)
-static inline BYTE *chrBase()
+// Return the base pointer a PPUBANK slot is addressed from.
+// Slots 0-7 are the pattern tables: CHR ROM, a mapper-owned CHR RAM buffer, or
+// the CHR RAM the core keeps at the bottom of PPURAM.
+// Slots 8-15 are always PPURAM (nametables plus the $3000 mirror / palette area),
+// so they must not be measured against the CHR base.
+static inline BYTE *ppuBankBase(int slot)
 {
-  return (NesHeader.byVRomSize > 0) ? VROM : PPURAM;
+  if (slot >= 8)
+    return PPURAM;
+  if (NesHeader.byVRomSize > 0)
+    return VROM;
+  if (MapperNo == 30 && Map30_Chr_Ram)
+    return Map30_Chr_Ram;
+  return PPURAM;
 }
 
 // Convert current PPUBANK / ROMBANK pointers to linear indices for serialization
 static void fillBankIndices(SaveCore &c)
 {
-  BYTE *base = chrBase();
   for (int i = 0; i < 16; i++)
-    c.ppuBankIndex[i] = (BYTE)((PPUBANK[i] - base) / 0x400);
+    c.ppuBankIndex[i] = (BYTE)((PPUBANK[i] - ppuBankBase(i)) / 0x400);
   for (int i = 0; i < 4; i++)
     c.prgBankIndex[i] = (uint16_t)((ROMBANK[i] - ROM) / 0x2000);
 }
@@ -341,9 +354,8 @@ static void fillBankIndices(SaveCore &c)
 // Rebuild PPUBANK pointers from stored indices
 static void restorePPUBanks(const SaveCore &c)
 {
-  BYTE *base = chrBase();
   for (int i = 0; i < 16; i++)
-    PPUBANK[i] = base + c.ppuBankIndex[i] * 0x400;
+    PPUBANK[i] = ppuBankBase(i) + c.ppuBankIndex[i] * 0x400;
 }
 
 // Rebuild PRG banks
@@ -379,6 +391,10 @@ int Emulator_SaveState(const char *path)
   struct SaveCore *coreDyn;
   coreDyn = (struct SaveCore *)Frens::f_malloc(sizeof(SaveCore));
   // Use dynamic allocation to avoid stack overflow on constrained systems
+  if (!coreDyn) {
+    printf("SaveState: out of memory for core data\n");
+    return -1;
+  }
   // Initialize to zero to avoid uninitialized padding bytes
   memset(coreDyn, 0, sizeof(SaveCore));
   SaveCore &core = *coreDyn;
@@ -507,6 +523,11 @@ int Emulator_SaveState(const char *path)
   size_t mapperSize = MapperBlobSize ? MapperBlobSize() : 0;
   if (mapperSize > 0 && MapperSaveBlob) {
     mapperBlob = Frens::f_malloc(mapperSize);
+    if (!mapperBlob) {
+      printf("SaveState: out of memory for mapper blob (%u bytes)\n", (unsigned)mapperSize);
+      Frens::f_free(coreDyn);
+      return -1;
+    }
     MapperSaveBlob((BYTE *)mapperBlob);
   // } else {
   //   Mapper_Save(mapperBlob, mapperSize);
@@ -520,6 +541,7 @@ int Emulator_SaveState(const char *path)
   if (f_open(&fp, path, FA_WRITE | FA_CREATE_ALWAYS) != FR_OK) {
     printf("SaveState: failed to open file %s\n", path);
     Frens::f_free(coreDyn);
+    if (mapperBlob) Frens::f_free(mapperBlob);
     return -1;
   }
 
@@ -547,8 +569,19 @@ int Emulator_SaveState(const char *path)
   if (!w(PPURAM, PPURAM_SIZE))
   {
     f_close(&fp);
-    printf("SaveState: failed to write PPURAM\n");  
-    if (mapperBlob) Frens::f_free(mapperBlob);  
+    printf("SaveState: failed to write PPURAM\n");
+    if (mapperBlob) Frens::f_free(mapperBlob);
+    return -1;
+  }
+
+  // Mapper-owned CHR RAM that lives outside PPURAM (mapper 30 keeps 32KB of its
+  // own). Written straight from the buffer so no second copy has to be
+  // allocated - an RP2040 has no room for one.
+  if (MapperNo == 30 && Map30_Chr_Ram && !w(Map30_Chr_Ram, MAP30_CHR_RAM_SIZE))
+  {
+    f_close(&fp);
+    printf("SaveState: failed to write mapper CHR RAM\n");
+    if (mapperBlob) Frens::f_free(mapperBlob);
     return -1;
   }
 
@@ -627,6 +660,11 @@ int Emulator_LoadState(const char *path)
   struct SaveCore *coreDyn;
   coreDyn = (struct SaveCore *)Frens::f_malloc(sizeof(SaveCore));
   // Use dynamic allocation to avoid stack overflow on constrained systems
+  if (!coreDyn) {
+    f_close(&fp);
+    printf("LoadState: out of memory for core data\n");
+    return -1;
+  }
   SaveCore &core = *coreDyn;
   if (!r(&core, sizeof core) ||
       !r(RAM, RAM_SIZE) ||
@@ -648,6 +686,15 @@ int Emulator_LoadState(const char *path)
     return -1;
   }
 
+  // Mapper-owned CHR RAM stored outside PPURAM (see Emulator_SaveState)
+  if (MapperNo == 30 && Map30_Chr_Ram && !r(Map30_Chr_Ram, MAP30_CHR_RAM_SIZE))
+  {
+    f_close(&fp);
+    printf("LoadState: failed to read mapper CHR RAM\n");
+    Frens::f_free(coreDyn);
+    return -1;
+  }
+
   // Mapper blob
   size_t mapperSize = 0;
   if (!r(&mapperSize, sizeof mapperSize))
@@ -658,11 +705,26 @@ int Emulator_LoadState(const char *path)
     return -1;
   }
   // mapper blob buffer
+  // Sanity bound: mapper blobs are small structs. A wild size here means a
+  // stale or corrupt file, and f_malloc panics on an absurd PSRAM request.
+  if (mapperSize > 0x10000)
+  {
+    f_close(&fp);
+    printf("LoadState: bogus mapper blob size %u, refusing state\n", (unsigned)mapperSize);
+    Frens::f_free(coreDyn);
+    return -1;
+  }
   BYTE  *mapperBuf = nullptr;
   if (mapperSize && MapperLoadBlob)
   {
     mapperBuf = (BYTE *)Frens::f_malloc(mapperSize);
-   
+    if (!mapperBuf)
+    {
+      f_close(&fp);
+      printf("LoadState: out of memory for mapper blob (%u bytes)\n", (unsigned)mapperSize);
+      Frens::f_free(coreDyn);
+      return -1;
+    }
     if (!r(mapperBuf, mapperSize))
     {
       f_close(&fp);

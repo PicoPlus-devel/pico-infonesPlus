@@ -12,6 +12,92 @@
 // 0x09 -> four-screen (not supported here, treat as 1-screen)
 static BYTE Map30_MirrorMode;
 
+/* CHR RAM (32KB = 4 x 8KB banks). UNROM 512 always carries 32KB of CHR RAM,
+ * which does not fit in the 8KB the core reserves at the bottom of PPURAM:
+ * CRAMPAGE() masks the page index with 0x1F, so bank 1 would alias straight
+ * onto the nametables and banks 2-3 would run past the end of the 16KB PPURAM
+ * allocation. Allocated lazily in Map30_Init, freed in InfoNES_Fin.
+ * MAP30_CHR_RAM_SIZE lives in InfoNES_Mapper.h because state.cpp needs it too. */
+BYTE *Map30_Chr_Ram;
+
+/* Last value written to the bank register; re-applied on save state load. */
+static BYTE Map30_Reg;
+
+#define Map30_CRAMPAGE(a) &Map30_Chr_Ram[((a) & 0x1F) * 0x400]
+
+/*-------------------------------------------------------------------*/
+/*  Apply the current register value to the PRG / CHR banks           */
+/*-------------------------------------------------------------------*/
+static void Map30_Sync()
+{
+  BYTE byData = Map30_Reg;
+
+  /* Set PRG ROM bank at $8000-$BFFF */
+  BYTE byBanks = NesHeader.byRomSize ? NesHeader.byRomSize : 1;
+  BYTE byPrg = ( byData & 0x1F ) % byBanks;
+  byPrg <<= 1;
+  ROMBANK0 = ROMPAGE( byPrg );
+  ROMBANK1 = ROMPAGE( byPrg + 1 );
+
+  /* Set CHR RAM bank at PPU $0000-$1FFF */
+  if ( Map30_Chr_Ram )
+  {
+    BYTE byChr = ( ( byData >> 5 ) & 0x03 ) << 3;
+    for ( int i = 0; i < 8; ++i )
+      PPUBANK[ i ] = Map30_CRAMPAGE( byChr + i );
+  }
+  else
+  {
+    /* Allocation failed (only possible on a RAM-constrained RP2040). Stay on
+     * bank 0 inside PPURAM: the wrong tiles are drawn for banks 1-3, but the
+     * nametables and the heap are left alone. */
+    for ( int i = 0; i < 8; ++i )
+      PPUBANK[ i ] = CRAMPAGE( i );
+  }
+  InfoNES_SetupChr();
+
+  /* Set mirroring if 1-screen mode is active */
+  if ( Map30_MirrorMode == 0x08 )
+  {
+    /* Bit 7: 0 = one-screen lower (0x2000), 1 = one-screen upper (0x2400) */
+    if ( byData & 0x80 )
+    {
+      InfoNES_Mirroring( 2 );  /* One Screen 0x2400 */
+    }
+    else
+    {
+      InfoNES_Mirroring( 3 );  /* One Screen 0x2000 */
+    }
+  }
+}
+
+/*-------------------------------------------------------------------*/
+/*  Save state support                                               */
+/*-------------------------------------------------------------------*/
+/* The blob carries only the bank register. The 32KB of CHR RAM is written
+ * straight to the state file next to PPURAM by state.cpp: routing it through
+ * the blob would make LoadState/SaveState allocate a second 32KB buffer on top
+ * of Map30_Chr_Ram, which an RP2040 does not have to spare. */
+static int Map30BlobSize()
+{
+  return 1;
+}
+
+static void Map30SaveBlob( BYTE *pBuf )
+{
+  pBuf[ 0 ] = Map30_Reg;
+}
+
+static void Map30LoadBlob( BYTE *pBuf )
+{
+  Map30_Reg = pBuf[ 0 ];
+
+  /* MapperLoadBlob runs last in LoadState, after restorePPUBanks() and
+   * InfoNES_Mirroring(), so this is what puts PPUBANK[0..7] and the
+   * mapper-controlled mirroring back. */
+  Map30_Sync();
+}
+
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 30                                             */
 /*-------------------------------------------------------------------*/
@@ -44,28 +130,32 @@ void Map30_Init()
   /* Callback at Rendering Screen ( 1:BG, 0:Sprite ) */
   MapperRenderScreen = Map0_RenderScreen;
 
+  /* Save state hooks (cleared on every reset, so install them here) */
+  MapperBlobSize = Map30BlobSize;
+  MapperSaveBlob = Map30SaveBlob;
+  MapperLoadBlob = Map30LoadBlob;
+
   /* Set SRAM Banks */
   SRAMBANK = SRAM;
 
   /* Determine mirroring mode from header */
   Map30_MirrorMode = NesHeader.byInfo1 & 0x09;
 
-  /* Set ROM Banks: first 16KB switchable, last 16KB fixed */
-  ROMBANK0 = ROMPAGE( 0 );
-  ROMBANK1 = ROMPAGE( 1 );
+  /* Allocate the 32KB CHR RAM once; Map30_Init is also the reset entry point. */
+  if ( !Map30_Chr_Ram )
+  {
+    Map30_Chr_Ram = (BYTE *)Frens::f_malloc( MAP30_CHR_RAM_SIZE );
+    if ( Map30_Chr_Ram )
+      InfoNES_MemorySet( Map30_Chr_Ram, 0, MAP30_CHR_RAM_SIZE );
+  }
+
+  /* Set ROM Banks: last 16KB fixed, first 16KB switchable (set by Map30_Sync) */
   ROMBANK2 = ROMLASTPAGE( 1 );
   ROMBANK3 = ROMLASTPAGE( 0 );
 
-  /* Set CHR-RAM Banks (8KB = 8 x 1KB pages) */
-  PPUBANK[ 0 ] = CRAMPAGE( 0 );
-  PPUBANK[ 1 ] = CRAMPAGE( 1 );
-  PPUBANK[ 2 ] = CRAMPAGE( 2 );
-  PPUBANK[ 3 ] = CRAMPAGE( 3 );
-  PPUBANK[ 4 ] = CRAMPAGE( 4 );
-  PPUBANK[ 5 ] = CRAMPAGE( 5 );
-  PPUBANK[ 6 ] = CRAMPAGE( 6 );
-  PPUBANK[ 7 ] = CRAMPAGE( 7 );
-  InfoNES_SetupChr();
+  /* Reset the bank register and apply it: PRG bank 0, CHR bank 0 */
+  Map30_Reg = 0;
+  Map30_Sync();
 
   /* Set up wiring of the interrupt pin */
   K6502_Set_Int_Wiring( 1, 1 );
@@ -82,36 +172,6 @@ void Map30_Write( WORD wAddr, BYTE byData )
    *  C (bits 5-6): CHR RAM bank select (8KB at PPU $0000)
    *  M (bit 7):    Mirroring select (1-screen mode only)
    */
-
-  /* Set PRG ROM bank at $8000-$BFFF */
-  BYTE byPrg = ( byData & 0x1F ) % NesHeader.byRomSize;
-  byPrg <<= 1;
-  ROMBANK0 = ROMPAGE( byPrg );
-  ROMBANK1 = ROMPAGE( byPrg + 1 );
-
-  /* Set CHR RAM bank at PPU $0000-$1FFF */
-  BYTE byChr = ( ( byData >> 5 ) & 0x03 ) << 3;
-  PPUBANK[ 0 ] = CRAMPAGE( byChr + 0 );
-  PPUBANK[ 1 ] = CRAMPAGE( byChr + 1 );
-  PPUBANK[ 2 ] = CRAMPAGE( byChr + 2 );
-  PPUBANK[ 3 ] = CRAMPAGE( byChr + 3 );
-  PPUBANK[ 4 ] = CRAMPAGE( byChr + 4 );
-  PPUBANK[ 5 ] = CRAMPAGE( byChr + 5 );
-  PPUBANK[ 6 ] = CRAMPAGE( byChr + 6 );
-  PPUBANK[ 7 ] = CRAMPAGE( byChr + 7 );
-  InfoNES_SetupChr();
-
-  /* Set mirroring if 1-screen mode is active */
-  if ( Map30_MirrorMode == 0x08 )
-  {
-    /* Bit 7: 0 = one-screen lower (0x2000), 1 = one-screen upper (0x2400) */
-    if ( byData & 0x80 )
-    {
-      InfoNES_Mirroring( 2 );  /* One Screen 0x2400 */
-    }
-    else
-    {
-      InfoNES_Mirroring( 3 );  /* One Screen 0x2000 */
-    }
-  }
+  Map30_Reg = byData;
+  Map30_Sync();
 }
