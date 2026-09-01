@@ -1,6 +1,6 @@
 # CHANGELOG
 
-Graphics and colour fixes for *Mike Tyson's Punch-Out!!*.
+Graphics and colour fixes for *Mike Tyson's Punch-Out!!*, and two divide-by-zero bugs fixed - one in the sound code that could silence or mistune a channel in a number of games.
 
 
 # General Info
@@ -27,6 +27,8 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 
 - Fixed the scrambled line of big letters on the boxer name screens in *Mike Tyson's Punch-Out!!*, and stray specks on the title screen of *Fire Emblem Gaiden (JP)*. Both games switch graphics banks from their sprites, which the emulator was ignoring.
 - Fixed wrong colours in games that set their palette in a way the emulator mishandled, among them *Mike Tyson's Punch-Out!!*, *Indiana Jones and the Last Crusade* and *Lunar Pool*. The same bug also made those games look different on different boards.
+- Fixed a divide-by-zero in the sound code that could be reached whenever a pulse channel's frequency sweep ran its pitch down far enough. On the Pico this produced a wrong or dropped channel rather than a crash. *Laser Invasion*, *Gun Sight (JP)*, *Anticipation*, *Al Unser Jr. Turbo Racing*, *Defenders of Dynatron City* and the Japanese *Contra* and *Goemon* are among the games that hit it.
+- A game claiming MMC5 but shipping no character ROM no longer divides by zero on every scanline.
 
 # v0.48
 

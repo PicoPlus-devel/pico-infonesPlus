@@ -197,6 +197,12 @@ void Map5_Apu( WORD wAddr, BYTE byData )
 
     case 0x5104:
       Map5_Gfx_Mode = byData & 0x03;
+      /* Extended-attribute mode (1) makes the background renderer index CHR
+         ROM directly, modulo its size in 1K pages - another division by zero
+         with no CHR ROM. Refuse the mode instead of guarding the per-tile
+         fetch, which is far too hot to test. */
+      if ( Map5_Gfx_Mode == 1 && NesHeader.byVRomSize == 0 )
+        Map5_Gfx_Mode = 0;
       break;
 
     case 0x5130:
@@ -441,6 +447,15 @@ void Map5_HSync()
 void Map5_RenderScreen( BYTE byMode )
 {
   DWORD dwPage[ 8 ];
+
+  /* Every bank index below is reduced modulo the CHR ROM size in 1K pages,
+     which is zero for a cartridge with no CHR ROM at all. A real MMC5 board
+     always has CHR ROM, but a malformed header can still claim mapper 5 with
+     0 CHR (Kkachi-wa Norae Chingu (Korea) does), and this runs once per
+     scanline - so it divided by zero on every line. There is nothing to remap
+     in that case: the CHR-RAM banks Map5_Init installed stay as they are. */
+  if ( NesHeader.byVRomSize == 0 )
+    return;
 
   switch ( Map5_Chr_Size )
   {

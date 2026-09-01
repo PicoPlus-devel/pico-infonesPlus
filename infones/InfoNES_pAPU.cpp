@@ -582,6 +582,23 @@ WORD __not_in_flash_func(ApuFreqLimit)[8] =
         0x3FF, 0x555, 0x666, 0x71C, 0x787, 0x7C1, 0x7E0, 0x7F0};
 
 /*-------------------------------------------------------------------*/
+/* Phase increment of a rectangle channel for a given period         */
+/*-------------------------------------------------------------------*/
+/* The divisor is period / 2, so a period of 0 *or* 1 divides by zero:
+   a SIGFPE on the host harness, and an undefined quotient on ARM where
+   the hardware does not trap. Both are unreachable in audible output
+   because ApuRenderingWave1/2 already silence the channel while the
+   period is below 8 - exactly as the APU's sweep unit mutes it - so the
+   Skip value is never read in that range. Returning 0 below the
+   threshold therefore removes the division without altering a single
+   audible sample. The frequency sweep can walk a period down into this
+   range, which is how Konami VRC titles reached it. */
+static inline DWORD ApuPulseSkip(WORD wFreq)
+{
+  return (wFreq < 8) ? 0 : ApuPulseMagic / (wFreq / 2);
+}
+
+/*-------------------------------------------------------------------*/
 /* Noise Frequency Lookup Tables (NTSC + PAL)                        */
 /*-------------------------------------------------------------------*/
 static DWORD __not_in_flash_func(ApuNoiseFreqNtsc)[16] =
@@ -646,14 +663,7 @@ int __not_in_flash_func(ApuWriteWave1)(int cycles, int event)
         ApuC1Freq = ((((WORD)ApuC1d & 0x07) << 8) + ApuC1c);
         ApuC1Atl = ApuAtl[(ApuC1d & 0xf8) >> 3];
 
-        if (ApuC1Freq)
-        {
-          ApuC1Skip = ApuPulseMagic / (ApuC1Freq / 2);
-        }
-        else
-        {
-          ApuC1Skip = 0;
-        }
+        ApuC1Skip = ApuPulseSkip(ApuC1Freq);
         break;
 
       case 3:
@@ -661,14 +671,7 @@ int __not_in_flash_func(ApuWriteWave1)(int cycles, int event)
         ApuC1Freq = ((((WORD)ApuC1d & 0x07) << 8) + ApuC1c);
         ApuC1Atl = ApuAtl[(ApuC1d & 0xf8) >> 3];
 
-        if (ApuC1Freq)
-        {
-          ApuC1Skip = ApuPulseMagic / (ApuC1Freq / 2);
-        }
-        else
-        {
-          ApuC1Skip = 0;
-        }
+        ApuC1Skip = ApuPulseSkip(ApuC1Freq);
 
         ApuC1EnvVol = 15;
         break;
@@ -748,14 +751,7 @@ int __not_in_flash_func(ApuWriteWave2)(int cycles, int event)
         ApuC2Freq = ((((WORD)ApuC2d & 0x07) << 8) + ApuC2c);
         ApuC2Atl = ApuAtl[(ApuC2d & 0xf8) >> 3];
 
-        if (ApuC2Freq)
-        {
-          ApuC2Skip = ApuPulseMagic / (ApuC2Freq / 2);
-        }
-        else
-        {
-          ApuC2Skip = 0;
-        }
+        ApuC2Skip = ApuPulseSkip(ApuC2Freq);
         break;
 
       case 3:
@@ -763,14 +759,7 @@ int __not_in_flash_func(ApuWriteWave2)(int cycles, int event)
         ApuC2Freq = ((((WORD)ApuC2d & 0x07) << 8) + ApuC2c);
         ApuC2Atl = ApuAtl[(ApuC2d & 0xf8) >> 3];
 
-        if (ApuC2Freq)
-        {
-          ApuC2Skip = ApuPulseMagic / (ApuC2Freq / 2);
-        }
-        else
-        {
-          ApuC2Skip = 0;
-        }
+        ApuC2Skip = ApuPulseSkip(ApuC2Freq);
         ApuC2EnvVol = 15;
         break;
       }
@@ -1827,7 +1816,7 @@ void InfoNES_pAPUVsync()
         ApuC1Freq += (ApuC1Freq >> ApuC1SweepShifts);
       }
 
-      ApuC1Skip = ApuPulseMagic / (ApuC1Freq / 2);
+      ApuC1Skip = ApuPulseSkip(ApuC1Freq);
     }
   }
 
@@ -1871,7 +1860,7 @@ void InfoNES_pAPUVsync()
         /* ramp down */
         ApuC2Freq += (ApuC2Freq >> ApuC2SweepShifts);
       }
-      ApuC2Skip = ApuPulseMagic / (ApuC2Freq / 2);
+      ApuC2Skip = ApuPulseSkip(ApuC2Freq);
     }
   }
 
