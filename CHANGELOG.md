@@ -1,6 +1,6 @@
 # CHANGELOG
 
-Graphics and colour fixes for *Mike Tyson's Punch-Out!!* and *Full Quiet*, flickering fixed in mapper 30 games such as *Knight on the Moon*, *DataMan* no longer starts on a black screen, and two divide-by-zero bugs fixed - one in the sound code that could silence or mistune a channel in a number of games.
+Graphics and colour fixes for *Mike Tyson's Punch-Out!!*, *Castlevania III* and *Full Quiet*, flickering fixed in mapper 30 games such as *Knight on the Moon*, *DataMan* no longer starts on a black screen, and two divide-by-zero bugs fixed - one in the sound code that could silence or mistune a channel in a number of games.
 
 
 # General Info
@@ -32,6 +32,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - Fixed the flickering and garbled graphics in mapper 30 games, such as *Knight on the Moon*. These games carry four banks of graphics memory and the emulator only provided one, so the other three were landing on top of the screen layout.
 - Fixed the scrambled player, enemies and status bar in *Full Quiet Steam*. The game uses four times more graphics memory than the emulator was giving it.
 - Fixed *DataMan*, which started on a black screen.
+- Fixed *Castlevania III: Dracula's Curse* filling the playfield with status-bar lettering after the intro had been left running for a while. A mid-screen graphics switch came one scanline too late, and a single mistimed frame threw the game off for the rest of play.
 
 # v0.48
 

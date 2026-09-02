@@ -419,12 +419,26 @@ void Map5_HSync()
   /* MMC5 has its own IRQ; prevent APU frame IRQ from interfering */
   FrameIRQ_Enable = 0;
 
-  if ( PPU_Scanline < 240 && PPU_ScanTable[ PPU_Scanline ] == SCAN_ON_SCREEN )
+  /* This runs in the h-blank between PPU_Scanline and the line after it, so
+     the line the MMC5 scanline counter is about to count is PPU_Scanline + 1.
+     Comparing PPU_Scanline itself raised the IRQ one scanline too late: the
+     CPU only samples the IRQ line at the start of the next K6502_Step, so the
+     handler began a full scanline (~114 cycles) after the hardware would have
+     entered it. Castlevania III arms its last split near line 239 and relies
+     on the handler finishing before the vblank NMI at line 241; with the lost
+     scanline the NMI landed inside the split handler, which has already paged
+     bank 2/3 in over $8000-$BFFF without updating the game's own bank shadow
+     at $21. The NMI then restored $5115 from that stale shadow and returned
+     into the middle of the split routine with the wrong bank mapped, so the
+     CPU executed data. */
+  WORD wLine = PPU_Scanline + 1;
+
+  if ( wLine < 240 && PPU_ScanTable[ wLine ] == SCAN_ON_SCREEN )
   {
     /* In visible frame */
     Map5_IRQ_Status |= 0x40;
 
-    if ( Map5_IRQ_Line != 0 && PPU_Scanline == Map5_IRQ_Line )
+    if ( Map5_IRQ_Line != 0 && wLine == Map5_IRQ_Line )
     {
       Map5_IRQ_Status |= 0x80;
 
