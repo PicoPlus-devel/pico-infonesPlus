@@ -882,7 +882,15 @@ void __not_in_flash_func(ApuRenderingWave3)(int n)
   ApuCtrlNew = ApuCtrl;
   ApuWriteWave3(ApuCyclesPerSample * (n + 1), 0);
 
-  if ((ApuCtrlNew & 0x04) && ApuC3Atl > 0 && ApuC3Llc > 0 && ApuC3Freq >= 8)
+  /* The "period < 8 silences the channel" rule belongs to the pulse channels,
+     where the sweep unit really does mute them (see ApuC1/C2). The triangle
+     has no such rule on hardware, and applying it here muted every triangle
+     note above about 6 kHz: the 240p Test Suite's 8000 Hz tone sets a period
+     of 6 and came out silent, while 4000 Hz (period 13) played.
+     Periods 0 and 1 are still skipped - they are ultrasonic and this renderer
+     is not band-limited, so they alias into an audible buzz. That matches the
+     cutoff Mesen offers for the same reason. */
+  if ((ApuCtrlNew & 0x04) && ApuC3Atl > 0 && ApuC3Llc > 0 && ApuC3Freq >= 2)
   {
     for (unsigned int i = 0; i < n; i++)
     {

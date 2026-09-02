@@ -352,6 +352,16 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
         /* Low */
         PPU_Temp = (PPU_Temp & 0xFF00) | (((WORD)byData) & 0x00FF);
         PPU_Addr = PPU_Temp;
+        /* A $2006 pair written while the picture is being drawn is how a game
+           picks a different name table row for the next line - Rad Racer II's
+           road does one per scanline. It clobbers the horizontal scroll in the
+           process, which on hardware does not matter: the PPU reloads the
+           horizontal bits of v from t at the end of every visible line, before
+           the affected line is fetched. This core runs a whole scanline's CPU
+           before drawing that line, so that reload has to happen here rather
+           than after the draw - see InfoNES_HSync(). */
+        if ((PPU_R1 & (R1_SHOW_SCR | R1_SHOW_SP)) && PPU_Scanline < SCAN_UNKNOWN_START)
+          PPU_MidFrameAddrWrite = 1;
         InfoNES_SetupScr();
       }
       else
@@ -379,9 +389,16 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       }
       else if (addr < 0x3f00) /* 0x2000 - 0x3eff */
       {
-        // Name Table and mirror
+        // Name Table and mirror. $3000-$3EFF mirrors $2000-$2EFF, and slots
+        // 12-15 are always the identity mapping into PPURAM, so the alias is
+        // kept coherent with a second store rather than a test on the read
+        // side. $2F00-$2FFF is the one range whose alias ($3F00-$3FFF) is
+        // overridden by palette RAM on hardware: copying it would overwrite
+        // the palette read-back bytes at PPURAM[0x3F00..0x3F1F]. Four-screen
+        // carts write the whole of $2C00-$2FFF, so this matters there.
         PPUBANK[addr >> 10][addr & 0x3ff] = byData;
-        PPUBANK[(addr ^ 0x1000) >> 10][addr & 0x3ff] = byData;
+        if ((addr & 0x3f00) != 0x2f00)
+          PPUBANK[(addr ^ 0x1000) >> 10][addr & 0x3ff] = byData;
       }
       else if (!(addr & 0xf)) /* 0x3f00 or 0x3f10 */
       {

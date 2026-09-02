@@ -69,10 +69,41 @@ extern BYTE *Map85_Chr_Ram;
 #define MAP30_CHR_RAM_SIZE 0x8000  /* UNROM 512:  4 x 8KB banks */
 #define MAP13_CHR_RAM_SIZE 0x4000  /* CPROM:      4 x 4KB banks */
 #define MAP96_CHR_RAM_SIZE 0x8000  /* Oeka Kids:  8 x 4KB banks */
+/* GTROM: one allocation holding 2 x 8KB CHR RAM banks followed by
+   2 x 4KB name table banks, so the name table RAM rides along with the CHR
+   RAM in the state file. */
+#define MAP111_CHR_RAM_SIZE 0x4000
+#define MAP111_NT_RAM_SIZE  0x2000
+#define MAP111_RAM_SIZE     (MAP111_CHR_RAM_SIZE + MAP111_NT_RAM_SIZE)
 extern BYTE *Map4_Chr_Ram;
 extern BYTE *Map30_Chr_Ram;
 extern BYTE *Map13_Chr_Ram;
 extern BYTE *Map96_Chr_Ram;
+extern BYTE *Map111_Chr_Ram;
+
+/*-------------------------------------------------------------------*/
+/*  SST39SF040 flash emulation (mappers 30 and 111)                  */
+/*-------------------------------------------------------------------*/
+
+/* Both boards are self-flashing: the game writes JEDEC command sequences into
+   the PRG window and reads the chip back. State lives in one of these, owned
+   by the mapper. See InfoNES_SstFlash.cpp. */
+struct SstFlash_tag
+{
+  void (*pfnResync)();  /* mapper's bank-apply function, called on mode change */
+  BYTE bySlotMaskId;    /* ROMBANK slots that show the ID page in ID mode      */
+  BYTE byStep;          /* command sequence position                           */
+  BYTE byIdMode;        /* software ID mode active                             */
+  DWORD dwShadowPage;   /* 8KB PRG page the RAM shadow stands in for, ~0 none  */
+};
+
+void SstFlash_Init(struct SstFlash_tag *pFlash, void (*pfnResync)(), BYTE bySlotMaskId);
+bool SstFlash_Write(struct SstFlash_tag *pFlash, WORD wAddr, BYTE byData, DWORD dwOfs);
+BYTE *SstFlash_Page(struct SstFlash_tag *pFlash, DWORD dwPage, int nSlot);
+void SstFlash_SaveBlob(struct SstFlash_tag *pFlash, BYTE *pBuf);
+void SstFlash_LoadBlob(struct SstFlash_tag *pFlash, BYTE *pBuf);
+int SstFlash_BlobSize();
+void SstFlash_Release();
 
 /*-------------------------------------------------------------------*/
 /*  Table of Mapper initialize function                              */
@@ -438,6 +469,11 @@ void Map109_Set_PPU_Banks();
 void Map110_Init();
 void Map110_Apu(WORD wAddr, BYTE byData);
 
+void Map111_Init();
+void Map111_Apu(WORD wAddr, BYTE byData);
+void Map111_Sram(WORD wAddr, BYTE byData);
+void Map111_Write(WORD wAddr, BYTE byData);
+
 void Map112_Init();
 void Map112_Write(WORD wAddr, BYTE byData);
 void Map112_HSync();
@@ -664,5 +700,8 @@ void Map255_Init();
 void Map255_Write(WORD wAddr, BYTE byData);
 void Map255_Apu(WORD wAddr, BYTE byData);
 BYTE Map255_ReadApu(WORD wAddr);
+
+void Map263_Init();
+void Map263_Write(WORD wAddr, BYTE byData);
 
 #endif /* !InfoNES_MAPPER_H_INCLUDED */

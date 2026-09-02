@@ -54,8 +54,9 @@ extern BYTE *ROM;         // PRG ROM base
 extern BYTE *ROMBANK[4];  // 4 x 8KB PRG bank pointers (typically 16KB/32KB mapped)
 extern BYTE *VROM;        // CHR ROM base (NULL if CHR RAM)
 extern struct NesHeader_tag NesHeader;
-extern BYTE MapperNo;
+extern WORD MapperNo;
 extern BYTE ROM_Mirroring; // Current mirroring type
+extern BYTE ROM_FourScr;   // iNES header byte 6 bit 3
 
 // PPU register/state
 extern BYTE PPU_R0, PPU_R1, PPU_R2, PPU_R3, PPU_R7;
@@ -326,17 +327,35 @@ struct SaveCore
 // Return the base pointer a PPUBANK slot is addressed from.
 // Slots 0-7 are the pattern tables: CHR ROM, a mapper-owned CHR RAM buffer, or
 // the CHR RAM the core keeps at the bottom of PPURAM.
-// Slots 8-15 are always PPURAM (nametables plus the $3000 mirror / palette area),
-// so they must not be measured against the CHR base.
+// Slots 8-11 are the nametables: mapper-owned nametable RAM if the board has
+// any (mapper 111 banks it), otherwise PPURAM. Slots 12-15 (the $3000 mirror
+// and the palette area) are always PPURAM, so they must never be measured
+// against the CHR or nametable base.
 static inline BYTE *ppuBankBase(int slot)
 {
-  if (slot >= 8)
+  if (slot >= 12)
     return PPURAM;
+  if (slot >= 8)
+    return MapperNtRam ? MapperNtRam : PPURAM;
   if (NesHeader.byVRomSize > 0)
     return VROM;
   if (MapperChrRam)
     return MapperChrRam;
   return PPURAM;
+}
+
+// True when the mapper's name table RAM has to travel in the state file on its
+// own. Mappers 30 and 111 carve both their CHR RAM and their name table RAM out
+// of one allocation, in which case MapperChrRam already covers it.
+static inline bool mapperNtRamNeedsFile()
+{
+  if (!MapperNtRam || !MapperNtRamSize)
+    return false;
+  if (MapperChrRam &&
+      MapperNtRam >= MapperChrRam &&
+      MapperNtRam + MapperNtRamSize <= MapperChrRam + MapperChrRamSize)
+    return false;
+  return true;
 }
 
 // Convert current PPUBANK / ROMBANK pointers to linear indices for serialization
@@ -582,6 +601,17 @@ int Emulator_SaveState(const char *path)
     return -1;
   }
 
+  // Name table RAM the mapper keeps outside PPURAM (mapper 111). Skipped when
+  // it is a sub-range of the CHR RAM just written - those boards have a single
+  // SRAM chip, and writing it twice would desync save from load.
+  if (mapperNtRamNeedsFile() && !w(MapperNtRam, MapperNtRamSize))
+  {
+    f_close(&fp);
+    printf("SaveState: failed to write mapper name table RAM\n");
+    if (mapperBlob) Frens::f_free(mapperBlob);
+    return -1;
+  }
+
   // Mapper / APU blobs length + payload
   if (!w(&mapperSize, sizeof mapperSize))
   {
@@ -688,6 +718,15 @@ int Emulator_LoadState(const char *path)
   {
     f_close(&fp);
     printf("LoadState: failed to read mapper CHR RAM\n");
+    Frens::f_free(coreDyn);
+    return -1;
+  }
+
+  // Name table RAM stored outside PPURAM (see Emulator_SaveState)
+  if (mapperNtRamNeedsFile() && !r(MapperNtRam, MapperNtRamSize))
+  {
+    f_close(&fp);
+    printf("LoadState: failed to read mapper name table RAM\n");
     Frens::f_free(coreDyn);
     return -1;
   }
@@ -875,7 +914,10 @@ int Emulator_LoadState(const char *path)
   // Rebind banks & mirroring
   restorePPUBanks(core);
   restorePRGBanks(core);
-  InfoNES_Mirroring(ROM_Mirroring);
+  // Must match InfoNES_SetupPPU: a four-screen cart has to come back on four
+  // name tables, and the MMC3 family's Map*LoadBlob guards on !ROM_FourScr so
+  // it will not put it back itself.
+  InfoNES_Mirroring(ROM_FourScr ? 4 : ROM_Mirroring);
 
   // Update pattern table base pointers & schedule decode refresh
   recalcPatternBases();

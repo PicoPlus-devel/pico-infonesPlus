@@ -193,6 +193,7 @@ BYTE byVramWriteEnable;
 
 /* PPU Address and Scroll Latch Flag*/
 BYTE PPU_Latch_Flag;
+BYTE PPU_MidFrameAddrWrite;
 
 /* Up and Down Clipping Flag ( 0: non-clip, 1: clip ) */
 BYTE PPU_UpDown_Clip;
@@ -304,6 +305,9 @@ void (*MapperLoadBlob)(BYTE *pBuf);
 BYTE *MapperChrRam;
 DWORD MapperChrRamSize;
 
+BYTE *MapperNtRam;
+DWORD MapperNtRamSize;
+
 /*-------------------------------------------------------------------*/
 /*  ROM information                                                  */
 /*-------------------------------------------------------------------*/
@@ -312,7 +316,10 @@ DWORD MapperChrRamSize;
 struct NesHeader_tag NesHeader;
 
 /* Mapper Number */
-BYTE MapperNo;
+WORD MapperNo;
+
+/* NES 2.0 submapper, 0 for iNES 1.0 images */
+BYTE SubMapperNo;
 
 /* Mirroring 0:Horizontal 1:Vertical */
 BYTE ROM_Mirroring;
@@ -400,7 +407,10 @@ void InfoNES_Fin()
   if (Map30_Chr_Ram) { Frens::f_free(Map30_Chr_Ram); Map30_Chr_Ram = nullptr; }
   if (Map13_Chr_Ram) { Frens::f_free(Map13_Chr_Ram); Map13_Chr_Ram = nullptr; }
   if (Map96_Chr_Ram) { Frens::f_free(Map96_Chr_Ram); Map96_Chr_Ram = nullptr; }
+  if (Map111_Chr_Ram) { Frens::f_free(Map111_Chr_Ram); Map111_Chr_Ram = nullptr; }
+  SstFlash_Release();
   MapperChrRam = nullptr; MapperChrRamSize = 0;
+  MapperNtRam = nullptr; MapperNtRamSize = 0;
   if (DRAM) { Frens::f_free(DRAM); DRAM = nullptr; }
 }
 
@@ -484,6 +494,7 @@ int InfoNES_Reset()
   {
     // Famicom Disk System: no iNES header, dispatch through synthetic mapper 20.
     MapperNo = 20;
+    SubMapperNo = 0;
     ROM_Mirroring = 0;
     ROM_SRAM = 0;
     ROM_Trainer = 0;
@@ -493,6 +504,7 @@ int InfoNES_Reset()
   {
     // Nintendo Sound Format: dispatch through synthetic mapper 31.
     MapperNo = 31;
+    SubMapperNo = 0;
     ROM_Mirroring = 0;
     ROM_SRAM = 0;
     ROM_Trainer = 0;
@@ -501,7 +513,20 @@ int InfoNES_Reset()
   else
   {
     // Mapper Number is 8bits. Always use lower 4bits of byInfo2 for compatibility with old ROMs.
-    MapperNo = (NesHeader.byInfo1 >> 4) | (NesHeader.byInfo2 & 0xf0);
+    MapperNo = (WORD)((NesHeader.byInfo1 >> 4) | (NesHeader.byInfo2 & 0xf0));
+    SubMapperNo = 0;
+
+    // NES 2.0 (byInfo2 bits 2-3 == 0b10) extends the mapper number with a
+    // third nibble in header byte 8 and adds a submapper in its high nibble.
+    // Without this a NES 2.0 image silently runs as the mapper named by its
+    // low 8 bits - Boogerman II is mapper 263 and was running as 7 (AxROM).
+    // Mapper 4 already reads byReserve[3] for its CHR RAM size, so the
+    // extended header is not a new dependency.
+    if ((NesHeader.byInfo2 & 0x0c) == 0x08)
+    {
+      MapperNo |= (WORD)(NesHeader.byReserve[0] & 0x0f) << 8;
+      SubMapperNo = (BYTE)(NesHeader.byReserve[0] >> 4);
+    }
 
     // Get information on the ROM
     ROM_Mirroring = NesHeader.byInfo1 & 1;
@@ -565,6 +590,8 @@ int InfoNES_Reset()
   // outside PPURAM simply leaves these null.
   MapperChrRam = nullptr;
   MapperChrRamSize = 0;
+  MapperNtRam = nullptr;
+  MapperNtRamSize = 0;
   // Only the MMC2/MMC4 CHR latch (mappers 9 and 10) needs to see sprite
   // pattern fetches; every other mapper leaves this null and pays nothing.
   MapperSprPPU = nullptr;
@@ -584,6 +611,29 @@ int InfoNES_Reset()
   {
     if (MapperTable[nIdx].nMapperNo == MapperNo)
       break;
+  }
+
+  // An extended NES 2.0 number we do not implement. Many of those are
+  // supersets of the mapper named by the low 8 bits (260 -> 4, 281 -> 25,
+  // 516 -> 4, ...) and boot far enough to be playable that way, which is
+  // exactly what happened before NES 2.0 was parsed at all. Fall back to the
+  // 8-bit reading instead of refusing the ROM, and adopt the number so the
+  // save-state header and the on-screen mapper display agree.
+  if (MapperTable[nIdx].nMapperNo == -1 && MapperNo > 0xff)
+  {
+    WORD wLegacy = MapperNo & 0xff;
+    int nLegacy;
+    for (nLegacy = 0; MapperTable[nLegacy].nMapperNo != -1; ++nLegacy)
+    {
+      if (MapperTable[nLegacy].nMapperNo == wLegacy)
+        break;
+    }
+    if (MapperTable[nLegacy].nMapperNo != -1)
+    {
+      InfoNES_MessageBox("Mapper #%d unimplemented, falling back to #%d\n", MapperNo, wLegacy);
+      MapperNo = wLegacy;
+      nIdx = nLegacy;
+    }
   }
 
   if (MapperTable[nIdx].nMapperNo == -1)
@@ -650,6 +700,7 @@ void InfoNES_SetupPPU()
   // PPU_Scr_H = PPU_Scr_H_Next = PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next = PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next = 0;
   // PPU_Scr_V_Byte = PPU_Scr_V_Bit = 0;
   PPU_Scr_H_Byte = PPU_Scr_H_Bit = 0;
+  PPU_MidFrameAddrWrite = 0;
 
   // Reset PPU address
   PPU_Addr = 0;
@@ -672,8 +723,15 @@ void InfoNES_SetupPPU()
   for (nPage = 0; nPage < 16; ++nPage)
     PPUBANK[nPage] = &PPURAM[nPage * 0x400];
 
-  /* Mirroring of Name Table */
-  InfoNES_Mirroring(ROM_Mirroring);
+  /* Mirroring of Name Table. Header byte 6 bit 3 asks for four independent
+     name tables (Rad Racer II, Gauntlet, Napoleon Senki); PPU_MirrorTable
+     row 4 and the 4KB of name table space in the 16KB PPURAM have always
+     been here, nothing ever selected them. The MMC3 family already guards
+     its mirroring writes with if (!ROM_FourScr), so those carts keep what
+     is set here. Mappers that use bit 3 as a mode bit rather than as real
+     four-screen (30 = UNROM 512 one-screen, 111 = GTROM) clear ROM_FourScr
+     in their Init, which runs after this. */
+  InfoNES_Mirroring(ROM_FourScr ? 4 : ROM_Mirroring);
 
   /* Reset VRAM Write Enable */
   byVramWriteEnable = (NesHeader.byVRomSize == 0) ? 1 : 0;
@@ -900,6 +958,22 @@ int __not_in_flash_func(InfoNES_HSync)()
   // tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
   // PPU_Scr_V_Bit = tmpv & 7;
   // PPU_Scr_V_Byte = (tmpv >> 3) & 31;
+  /* The game moved the PPU address mid-frame (a $2006 pair) to select the row
+     for this line. On hardware the horizontal bits of v are reloaded from t at
+     dot 257 of the preceding line, which is before the fetches for this one -
+     so the row comes from the $2006 write but the column still comes from the
+     last $2005. Rad Racer II's road relies on it: it writes a fresh row every
+     scanline with a coarse X of 0, and without the reload the top half of the
+     road is drawn 128 pixels off. The unconditional reload further down runs
+     after the line is drawn and is what every other game needs, so this only
+     fires when a mid-frame $2006 actually happened. */
+  if (PPU_MidFrameAddrWrite)
+  {
+    PPU_MidFrameAddrWrite = 0;
+    if ((PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)) && PPU_Scanline < SCAN_UNKNOWN_START)
+      PPU_Addr = (PPU_Addr & ~0b10000011111) | (PPU_Temp & 0b10000011111);
+  }
+
   PPU_Scr_H_Byte = PPU_Addr & 31;
   PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
 
@@ -1919,7 +1993,13 @@ void __not_in_flash_func(InfoNES_GetSprHitY)()
 
   auto *data = PPUBANK[bank] + addrOfs;
 
-  if ((SPRRAM[SPR_Y] + 1 <= SCAN_UNKNOWN_START) && (SPRRAM[SPR_Y] > 0))
+  /* A sprite whose OAM Y byte is 0 is drawn on scanline 1, so it can hit like
+     any other. Upstream InfoNES excluded Y == 0 here and declared "no sprite 0
+     hit" for the whole frame; the 240p Test Suite's hill zone scroll test puts
+     sprite 0 at Y = 0 and polls $2002 for the hit, so it burned a frame in that
+     loop every other frame - the screen appeared frozen and strobing. Games
+     park unused sprites at Y >= $EF, not at 0, which the upper bound covers. */
+  if (SPRRAM[SPR_Y] + 1 <= SCAN_UNKNOWN_START)
   {
     for (int nLine = 0; nLine < PPU_SP_Height; nLine++)
     {

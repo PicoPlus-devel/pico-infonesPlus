@@ -127,6 +127,7 @@ const struct MapperTable_tag MapperTable[] =
         {108, Map108_Init},
         {109, Map109_Init},
         {110, Map110_Init},
+        {111, Map111_Init},
         {112, Map112_Init},
         {113, Map113_Init},
         {114, Map114_Init},
@@ -184,11 +185,15 @@ const struct MapperTable_tag MapperTable[] =
         {251, Map251_Init},
         {252, Map252_Init},
         {255, Map255_Init},
+        {263, Map263_Init},
         {-1, NULL}};
 
 /*-------------------------------------------------------------------*/
 /*  body of Mapper functions                                         */
 /*-------------------------------------------------------------------*/
+
+/* Shared by mappers 30 and 111, so it has to come first. */
+#include "mapper/InfoNES_SstFlash.cpp"
 
 #include "mapper/InfoNES_Mapper_000.cpp"
 #include "mapper/InfoNES_Mapper_001.cpp"
@@ -279,6 +284,7 @@ const struct MapperTable_tag MapperTable[] =
 #include "mapper/InfoNES_Mapper_108.cpp"
 #include "mapper/InfoNES_Mapper_109.cpp"
 #include "mapper/InfoNES_Mapper_110.cpp"
+#include "mapper/InfoNES_Mapper_111.cpp"
 #include "mapper/InfoNES_Mapper_112.cpp"
 #include "mapper/InfoNES_Mapper_113.cpp"
 #include "mapper/InfoNES_Mapper_114.cpp"
@@ -336,5 +342,6 @@ const struct MapperTable_tag MapperTable[] =
 #include "mapper/InfoNES_Mapper_251.cpp"
 #include "mapper/InfoNES_Mapper_252.cpp"
 #include "mapper/InfoNES_Mapper_255.cpp"
+#include "mapper/InfoNES_Mapper_263.cpp"
 
 /* End of InfoNES_Mapper.cpp */

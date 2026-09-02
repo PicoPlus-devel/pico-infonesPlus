@@ -201,7 +201,12 @@ static bool parse_ines(uint8_t *buf, size_t size)
     p += NesHeader.byRomSize * 0x4000;
     VROM = NesHeader.byVRomSize ? p : nullptr;
 
+    // InfoNES_Reset() recomputes all of this; it is here only so the pre-reset
+    // banner prints the right number. Keep the NES 2.0 extension in sync with
+    // InfoNES.cpp.
     MapperNo      = (NesHeader.byInfo1 >> 4) | (NesHeader.byInfo2 & 0xF0);
+    if ((NesHeader.byInfo2 & 0x0C) == 0x08)
+        MapperNo |= (WORD)(NesHeader.byReserve[0] & 0x0F) << 8;
     ROM_Mirroring = NesHeader.byInfo1 & 1;
     ROM_SRAM      = (NesHeader.byInfo1 & 2) ? 1 : 0;
     ROM_Trainer   = (NesHeader.byInfo1 & 4) ? 1 : 0;

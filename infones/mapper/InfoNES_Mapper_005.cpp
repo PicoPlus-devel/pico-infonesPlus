@@ -79,9 +79,16 @@ void Map5_Init()
   ROMBANK2 = ROMLASTPAGE( 0 );
   ROMBANK3 = ROMLASTPAGE( 0 );
 
-  /* Set PPU Banks */
+  /* Set PPU Banks. A real MMC5 board always has CHR ROM, but a malformed
+     header can claim mapper 5 with none (Kkachi-wa Norae Chingu (Korea)
+     does). VROM is then null and VROMPAGE() would hand the PPU eight
+     pointers into address 0 - a hard fault on the device the moment anything
+     reads a pattern. Fall back to the 8KB of CHR RAM the core keeps at the
+     bottom of PPURAM, which is what Map5_SetBank_CPPU already assumes when
+     it returns early for a CHR-RAM cartridge. */
   for ( nPage = 0; nPage < 8; ++nPage )
-    PPUBANK[ nPage ] = VROMPAGE( nPage );
+    PPUBANK[ nPage ] = ( NesHeader.byVRomSize > 0 ) ? VROMPAGE( nPage )
+                                                    : CRAMPAGE( nPage );
   InfoNES_SetupChr();
 
   /* Initialize State Registers */
