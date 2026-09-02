@@ -10,6 +10,19 @@ DWORD Map4_Prg0, Map4_Prg1;
 DWORD Map4_Chr01, Map4_Chr23;
 DWORD Map4_Chr4, Map4_Chr5, Map4_Chr6, Map4_Chr7;
 
+/* CHR RAM banking. An MMC3 board with CHR RAM instead of CHR ROM banks that
+ * RAM through the same registers, but the core only reserves 8KB for CHR RAM
+ * at the bottom of PPURAM. A cartridge carrying more (Full Quiet: 32KB, told
+ * by NES 2.0 header byte 11) gets its own buffer here and real banking; every
+ * other cartridge keeps the flat 8KB mapping this mapper has always used, so
+ * nothing changes for the iNES 1.0 CHR-RAM games (Mega Man 4/6, Final Fantasy
+ * III, Ninja Crusaders, ...) or for any CHR-ROM game.
+ * Allocated lazily in Map4_Init, freed in InfoNES_Fin. */
+BYTE *Map4_Chr_Ram;
+static DWORD Map4_Chr_Ram_Pages;   /* 0 = flat 8KB inside PPURAM */
+
+#define Map4_CRAMPAGE(a) &Map4_Chr_Ram[ ( (a) % Map4_Chr_Ram_Pages ) * 0x400 ]
+
 #define Map4_Chr_Swap()    ( Map4_Regs[ 0 ] & 0x80 )
 #define Map4_Prg_Swap()    ( Map4_Regs[ 0 ] & 0x40 )
 
@@ -144,6 +157,37 @@ void Map4_Init()
   /* Set SRAM Banks */
   SRAMBANK = SRAM;
 
+  /* Claim a CHR RAM buffer when the cartridge carries more than the 8KB the
+     core keeps in PPURAM. Only NES 2.0 can declare that (byte 11, low nibble:
+     size = 64 << shift), so an iNES 1.0 header never takes this path. */
+  Map4_Chr_Ram_Pages = 0;
+  if ( NesHeader.byVRomSize == 0 && ( NesHeader.byInfo2 & 0x0c ) == 0x08 )
+  {
+    BYTE byShift = NesHeader.byReserve[ 3 ] & 0x0f;
+    DWORD dwSize = byShift ? ( 64u << byShift ) : 0;
+
+    if ( dwSize > 0x2000 )
+    {
+      if ( dwSize > MAP4_CHR_RAM_SIZE )
+        dwSize = MAP4_CHR_RAM_SIZE;
+
+      if ( !Map4_Chr_Ram )
+      {
+        Map4_Chr_Ram = (BYTE *)Frens::f_malloc( MAP4_CHR_RAM_SIZE );
+        if ( Map4_Chr_Ram )
+          InfoNES_MemorySet( Map4_Chr_Ram, 0, MAP4_CHR_RAM_SIZE );
+      }
+
+      /* Allocation failure (only possible on a RAM-constrained RP2040) leaves
+         the page count at 0, which falls back to the flat 8KB mapping: the
+         wrong tiles are drawn, but nothing runs off the end of PPURAM. */
+      if ( Map4_Chr_Ram )
+        Map4_Chr_Ram_Pages = dwSize / 0x400;
+    }
+  }
+  MapperChrRam     = Map4_Chr_Ram_Pages ? Map4_Chr_Ram : nullptr;
+  MapperChrRamSize = Map4_Chr_Ram_Pages * 0x400;
+
   /* Initialize State Registers */
   for ( int nPage = 0; nPage < 8; nPage++ )
   {
@@ -156,7 +200,7 @@ void Map4_Init()
   Map4_Set_CPU_Banks();
 
   /* Set PPU Banks */
-  if ( NesHeader.byVRomSize > 0 )
+  if ( NesHeader.byVRomSize > 0 || Map4_Chr_Ram_Pages )
   {
     Map4_Chr01 = 0;
     Map4_Chr23 = 2;
@@ -205,7 +249,7 @@ void Map4_Write( WORD wAddr, BYTE byData )
       {
         /* Set PPU Banks */
         case 0x00:
-          if ( NesHeader.byVRomSize > 0 )
+          if ( NesHeader.byVRomSize > 0 || Map4_Chr_Ram_Pages )
           {
             dwBankNum &= 0xfe;
             Map4_Chr01 = dwBankNum;
@@ -214,7 +258,7 @@ void Map4_Write( WORD wAddr, BYTE byData )
           break;
 
         case 0x01:
-          if ( NesHeader.byVRomSize > 0 )
+          if ( NesHeader.byVRomSize > 0 || Map4_Chr_Ram_Pages )
           {
             dwBankNum &= 0xfe;
             Map4_Chr23 = dwBankNum;
@@ -223,7 +267,7 @@ void Map4_Write( WORD wAddr, BYTE byData )
           break;
 
         case 0x02:
-          if ( NesHeader.byVRomSize > 0 )
+          if ( NesHeader.byVRomSize > 0 || Map4_Chr_Ram_Pages )
           {
             Map4_Chr4 = dwBankNum;
             Map4_Set_PPU_Banks();
@@ -231,7 +275,7 @@ void Map4_Write( WORD wAddr, BYTE byData )
           break;
 
         case 0x03:
-          if ( NesHeader.byVRomSize > 0 )
+          if ( NesHeader.byVRomSize > 0 || Map4_Chr_Ram_Pages )
           {
             Map4_Chr5 = dwBankNum;
             Map4_Set_PPU_Banks();
@@ -239,7 +283,7 @@ void Map4_Write( WORD wAddr, BYTE byData )
           break;
 
         case 0x04:
-          if ( NesHeader.byVRomSize > 0 )
+          if ( NesHeader.byVRomSize > 0 || Map4_Chr_Ram_Pages )
           {
             Map4_Chr6 = dwBankNum;
             Map4_Set_PPU_Banks();
@@ -247,7 +291,7 @@ void Map4_Write( WORD wAddr, BYTE byData )
           break;
 
         case 0x05:
-          if ( NesHeader.byVRomSize > 0 )
+          if ( NesHeader.byVRomSize > 0 || Map4_Chr_Ram_Pages )
           {
             Map4_Chr7 = dwBankNum;
             Map4_Set_PPU_Banks();
@@ -401,6 +445,31 @@ void Map4_Set_PPU_Banks()
       PPUBANK[ 7 ] = VROMPAGE( Map4_Chr7 % ( NesHeader.byVRomSize << 3 ) );
       InfoNES_SetupChr();
     }
+  }
+  else if ( Map4_Chr_Ram_Pages )
+  {
+    /* Same banking as the CHR ROM branch above, into the mapper's CHR RAM. */
+    if ( Map4_Chr_Swap() )
+    {
+      PPUBANK[ 0 ] = Map4_CRAMPAGE( Map4_Chr4 );
+      PPUBANK[ 1 ] = Map4_CRAMPAGE( Map4_Chr5 );
+      PPUBANK[ 2 ] = Map4_CRAMPAGE( Map4_Chr6 );
+      PPUBANK[ 3 ] = Map4_CRAMPAGE( Map4_Chr7 );
+      PPUBANK[ 4 ] = Map4_CRAMPAGE( Map4_Chr01 + 0 );
+      PPUBANK[ 5 ] = Map4_CRAMPAGE( Map4_Chr01 + 1 );
+      PPUBANK[ 6 ] = Map4_CRAMPAGE( Map4_Chr23 + 0 );
+      PPUBANK[ 7 ] = Map4_CRAMPAGE( Map4_Chr23 + 1 );
+    } else {
+      PPUBANK[ 0 ] = Map4_CRAMPAGE( Map4_Chr01 + 0 );
+      PPUBANK[ 1 ] = Map4_CRAMPAGE( Map4_Chr01 + 1 );
+      PPUBANK[ 2 ] = Map4_CRAMPAGE( Map4_Chr23 + 0 );
+      PPUBANK[ 3 ] = Map4_CRAMPAGE( Map4_Chr23 + 1 );
+      PPUBANK[ 4 ] = Map4_CRAMPAGE( Map4_Chr4 );
+      PPUBANK[ 5 ] = Map4_CRAMPAGE( Map4_Chr5 );
+      PPUBANK[ 6 ] = Map4_CRAMPAGE( Map4_Chr6 );
+      PPUBANK[ 7 ] = Map4_CRAMPAGE( Map4_Chr7 );
+    }
+    InfoNES_SetupChr();
   }
   else
   {

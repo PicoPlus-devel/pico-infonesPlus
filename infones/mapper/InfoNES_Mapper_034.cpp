@@ -40,8 +40,21 @@ void Map34_Init()
   SRAMBANK = SRAM;
 
   /* Set ROM Banks */
-  ROMBANK0 = ROMPAGE( 0 );
-  ROMBANK1 = ROMPAGE( 1 );
+  /* Both boards map one 32KB bank across $8000-$FFFF, so power on with a
+     coherent bank rather than a first-16KB/last-16KB mix. The reset vector
+     is read from the last page, so the last 32KB bank is the one to pick:
+     a BNROM game that jumps below $C000 before writing the bank register
+     (DataMan) otherwise lands in the wrong bank and runs BRKs forever. */
+  if ( NesHeader.byRomSize >= 2 )   /* at least 32KB of PRG */
+  {
+    ROMBANK0 = ROMLASTPAGE( 3 );
+    ROMBANK1 = ROMLASTPAGE( 2 );
+  }
+  else
+  {
+    ROMBANK0 = ROMPAGE( 0 );
+    ROMBANK1 = ROMPAGE( 1 );
+  }
   ROMBANK2 = ROMLASTPAGE( 1 );
   ROMBANK3 = ROMLASTPAGE( 0 );
 
@@ -77,6 +90,13 @@ void Map34_Write( WORD wAddr, BYTE byData )
 /*-------------------------------------------------------------------*/
 void Map34_Sram( WORD wAddr, BYTE byData )
 {
+  /* The NINA-001 registers only exist on the CHR-ROM variant of mapper 34.
+     A BNROM board has plain WRAM here and no VROM at all, so the $7ffe /
+     $7fff cases would divide by zero and then point PPUBANK[0..3] at a
+     null VROM. */
+  if ( NesHeader.byVRomSize == 0 )
+    return;
+
   switch(wAddr)
   {
     /* Set ROM Banks */

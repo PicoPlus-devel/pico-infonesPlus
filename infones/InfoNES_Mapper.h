@@ -66,9 +66,11 @@ extern BYTE *Map85_Chr_Ram;
 /* Mapper-owned CHR RAM that does not fit in the 8KB the core reserves at the
    bottom of PPURAM. Each is allocated on first init via f_malloc and written
    straight to the state file by state.cpp, not through the mapper blob. */
+#define MAP4_CHR_RAM_SIZE  0x8000  /* MMC3:       32 x 1KB banks */
 #define MAP30_CHR_RAM_SIZE 0x8000  /* UNROM 512:  4 x 8KB banks */
 #define MAP13_CHR_RAM_SIZE 0x4000  /* CPROM:      4 x 4KB banks */
 #define MAP96_CHR_RAM_SIZE 0x8000  /* Oeka Kids:  8 x 4KB banks */
+extern BYTE *Map4_Chr_Ram;
 extern BYTE *Map30_Chr_Ram;
 extern BYTE *Map13_Chr_Ram;
 extern BYTE *Map96_Chr_Ram;

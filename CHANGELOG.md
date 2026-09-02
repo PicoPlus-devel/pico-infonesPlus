@@ -1,6 +1,6 @@
 # CHANGELOG
 
-Graphics and colour fixes for *Mike Tyson's Punch-Out!!*, flickering fixed in mapper 30 games such as *Knight on the Moon*, and two divide-by-zero bugs fixed - one in the sound code that could silence or mistune a channel in a number of games.
+Graphics and colour fixes for *Mike Tyson's Punch-Out!!* and *Full Quiet*, flickering fixed in mapper 30 games such as *Knight on the Moon*, *DataMan* no longer starts on a black screen, and two divide-by-zero bugs fixed - one in the sound code that could silence or mistune a channel in a number of games.
 
 
 # General Info
@@ -31,6 +31,8 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - A game claiming MMC5 but shipping no character ROM no longer divides by zero on every scanline.
 - Fixed the flickering and garbled graphics in mapper 30 games, such as *Knight on the Moon*. These games carry four banks of graphics memory and the emulator only provided one, so the other three were landing on top of the screen layout.
 - Fixed the same problem in *Videomation*, where the drawing canvas was filled with garbage, and in the two *Oeka Kids* titles.
+- Fixed the scrambled player, enemies and status bar in *Full Quiet*. The game uses four times more graphics memory than the emulator was giving it.
+- Fixed *DataMan*, which started on a black screen.
 
 # v0.48
 

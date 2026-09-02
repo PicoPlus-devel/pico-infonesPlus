@@ -396,6 +396,7 @@ void InfoNES_Fin()
   if (Map5_Ex_Nam) { Frens::f_free(Map5_Ex_Nam); Map5_Ex_Nam = nullptr; }
   Map5_Gfx_Mode = 0;
 #endif
+  if (Map4_Chr_Ram) { Frens::f_free(Map4_Chr_Ram); Map4_Chr_Ram = nullptr; }
   if (Map85_Chr_Ram) { Frens::f_free(Map85_Chr_Ram); Map85_Chr_Ram = nullptr; }
   if (Map30_Chr_Ram) { Frens::f_free(Map30_Chr_Ram); Map30_Chr_Ram = nullptr; }
   if (Map13_Chr_Ram) { Frens::f_free(Map13_Chr_Ram); Map13_Chr_Ram = nullptr; }
