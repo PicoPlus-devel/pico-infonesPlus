@@ -52,7 +52,6 @@ extern BYTE *DRAM;
 /* The address of 8Kbytes unit of the Map5 WRAM */
 #if PICO_RP2350
 extern BYTE *Map5_Wram;
-extern BYTE *Map5_Ex_Ram;
 extern BYTE *Map5_Ex_Vram;
 extern BYTE *Map5_Ex_Nam;
 extern BYTE Map5_Gfx_Mode;

@@ -6,7 +6,6 @@
 
 
 BYTE *Map5_Wram;
-BYTE *Map5_Ex_Ram;
 BYTE *Map5_Ex_Vram;
 BYTE *Map5_Ex_Nam;
 BYTE (*mmc5_wave_buffers)[APU_MAX_SAMPLES_PER_SYNC];
@@ -27,6 +26,11 @@ BYTE Map5_Prg_Size;
 BYTE Map5_Chr_Size;
 BYTE Map5_Gfx_Mode;
 BYTE Map5_Chr_Upper;
+/* Which of the two CHR bank sets was written last: 0 = the sprite ("A") set at
+   $5120-$5127, 1 = the background ("B") set at $5128-$512B. With 8x16 sprites
+   the PPU uses A for sprite fetches and B for background fetches, but with 8x8
+   sprites it uses this one set for both. */
+BYTE Map5_Chr_Last_Set;
 
 /* Forward declarations */
 void Map5_Sram( WORD wAddr, BYTE byData );
@@ -88,19 +92,22 @@ void Map5_Init()
   }
   Map5_Wram_Reg[ 3 ] = 0xff;
 
-  for ( BYTE byPage = 4; byPage < 8; ++byPage )
+  /* All eight registers of both sets, not just 4-7: in the 1K banking mode the
+     mapper defaults to, the lower half of each pattern table would otherwise
+     read page 0 until the game programs it. This leaves both sets as the
+     identity mapping the PPUBANK loop above just installed. */
+  for ( BYTE byPage = 0; byPage < 8; ++byPage )
   {
     Map5_Chr_Reg[ byPage ][ 0 ] = byPage;
-    Map5_Chr_Reg[ byPage ][ 1 ] = ( byPage & 0x03 ) + 4;
+    Map5_Chr_Reg[ byPage ][ 1 ] = byPage;
   }
+  Map5_Chr_Last_Set = 1;
 
   Map5_Wram = (BYTE *)Frens::f_malloc(0x2000 * 8);
-  Map5_Ex_Ram = (BYTE *)Frens::f_malloc(0x400);
   Map5_Ex_Vram = (BYTE *)Frens::f_malloc(0x400);
   Map5_Ex_Nam = (BYTE *)Frens::f_malloc(0x400);
 
   InfoNES_MemorySet( Map5_Wram, 0x00, 0x2000 * 8 );
-  InfoNES_MemorySet( Map5_Ex_Ram, 0x00, 0x400 );
   InfoNES_MemorySet( Map5_Ex_Vram, 0x00, 0x400 );
   InfoNES_MemorySet( Map5_Ex_Nam, 0x00, 0x400 );
 
@@ -161,9 +168,12 @@ BYTE Map5_ReadApu( WORD wAddr )
       break;
 
     default:
-      if ( 0x5c00 <= wAddr && wAddr <= 0x5fff )
+      /* The MMC5 has a single 1K ExRAM. $5104 only decides who may touch it:
+         the CPU can read it back in modes 2 (read/write) and 3 (read-only),
+         and gets open bus in the two modes where the PPU owns it. */
+      if ( 0x5c00 <= wAddr && wAddr <= 0x5fff && Map5_Gfx_Mode >= 2 )
       {
-        byRet = Map5_Ex_Ram[ wAddr - 0x5c00 ];
+        byRet = Map5_Ex_Vram[ wAddr - 0x5c00 ];
       }
       break;
   }
@@ -180,7 +190,10 @@ void Map5_Apu( WORD wAddr, BYTE byData )
   switch ( wAddr )
   {
     case 0x5100:
+      /* Re-lay the windows straight away - waiting for the next $5114-$5117
+         write leaves the previous mode's layout mapped in the meantime. */
       Map5_Prg_Size = byData & 0x03;
+      Map5_Sync_Prg_Banks();
       break;
 
     case 0x5101:
@@ -275,6 +288,7 @@ void Map5_Apu( WORD wAddr, BYTE byData )
     case 0x5126:
     case 0x5127:
       Map5_Chr_Reg[ wAddr & 0x07 ][ 0 ] = byData;
+      Map5_Chr_Last_Set = 0;
       break;
 
     case 0x5128:
@@ -283,6 +297,7 @@ void Map5_Apu( WORD wAddr, BYTE byData )
     case 0x512b:
       Map5_Chr_Reg[ ( wAddr & 0x03 ) + 0 ][ 1 ] = byData;
       Map5_Chr_Reg[ ( wAddr & 0x03 ) + 4 ][ 1 ] = byData;
+      Map5_Chr_Last_Set = 1;
       break;
 
     case 0x5200:
@@ -349,15 +364,10 @@ void Map5_Apu( WORD wAddr, BYTE byData )
       } else 
       if ( 0x5c00 <= wAddr && wAddr <= 0x5fff )
       {
-        switch ( Map5_Gfx_Mode )
+        /* One buffer, as above. Mode 3 makes ExRAM read-only. */
+        if ( Map5_Gfx_Mode != 3 )
         {
-          case 0:
-          case 1:
-            Map5_Ex_Vram[ wAddr - 0x5c00 ] = byData;
-            break;
-          case 2:
-            Map5_Ex_Ram[ wAddr - 0x5c00 ] = byData;
-            break;
+          Map5_Ex_Vram[ wAddr - 0x5c00 ] = byData;
         }
       }
       break;
@@ -471,10 +481,22 @@ void Map5_RenderScreen( BYTE byMode )
   if ( NesHeader.byVRomSize == 0 )
     return;
 
+  /* byMode picks the bank set the way 8x16 sprites work on the real chip: the
+     background pass fetches through the "B" registers, the sprite pass through
+     "A". With 8x8 sprites there is only one set of fetches, and the chip uses
+     whichever set was written last for both passes. Games that only ever write
+     one set had their background drawn from registers they never programmed -
+     Yakuman Tengoku's title screen and Genchou Hishi's map were both garbage. */
+  const BYTE bySet = ( PPU_R0 & R0_SP_SIZE ) ? byMode : Map5_Chr_Last_Set;
+
+  /* $5130 supplies the two bits above the 8 a bank register holds, which is
+     what carries CHR larger than 256K in the finer banking modes. */
+  #define Map5_CHR_BANK( n ) ( ( (DWORD)Map5_Chr_Upper << 8 ) | Map5_Chr_Reg[ n ][ bySet ] )
+
   switch ( Map5_Chr_Size )
   {
     case 0:
-      dwPage[ 7 ] = ( (DWORD)Map5_Chr_Reg[7][byMode] << 3 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 7 ] = ( Map5_CHR_BANK( 7 ) << 3 ) % ( NesHeader.byVRomSize << 3 );
 
       PPUBANK[ 0 ] = VROMPAGE( dwPage[ 7 ] + 0 );
       PPUBANK[ 1 ] = VROMPAGE( dwPage[ 7 ] + 1 );
@@ -488,8 +510,8 @@ void Map5_RenderScreen( BYTE byMode )
       break;
 
     case 1:
-      dwPage[ 3 ] = ( (DWORD)Map5_Chr_Reg[3][byMode] << 2 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 7 ] = ( (DWORD)Map5_Chr_Reg[7][byMode] << 2 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 3 ] = ( Map5_CHR_BANK( 3 ) << 2 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 7 ] = ( Map5_CHR_BANK( 7 ) << 2 ) % ( NesHeader.byVRomSize << 3 );
 
       PPUBANK[ 0 ] = VROMPAGE( dwPage[ 3 ] + 0 );
       PPUBANK[ 1 ] = VROMPAGE( dwPage[ 3 ] + 1 );
@@ -503,10 +525,10 @@ void Map5_RenderScreen( BYTE byMode )
       break;
 
     case 2:
-      dwPage[ 1 ] = ( (DWORD)Map5_Chr_Reg[1][byMode] << 1 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 3 ] = ( (DWORD)Map5_Chr_Reg[3][byMode] << 1 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 5 ] = ( (DWORD)Map5_Chr_Reg[5][byMode] << 1 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 7 ] = ( (DWORD)Map5_Chr_Reg[7][byMode] << 1 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 1 ] = ( Map5_CHR_BANK( 1 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 3 ] = ( Map5_CHR_BANK( 3 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 5 ] = ( Map5_CHR_BANK( 5 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 7 ] = ( Map5_CHR_BANK( 7 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
 
       PPUBANK[ 0 ] = VROMPAGE( dwPage[ 1 ] + 0 );
       PPUBANK[ 1 ] = VROMPAGE( dwPage[ 1 ] + 1 );
@@ -520,14 +542,14 @@ void Map5_RenderScreen( BYTE byMode )
       break;
 
     default:
-      dwPage[ 0 ] = (DWORD)Map5_Chr_Reg[0][byMode] % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 1 ] = (DWORD)Map5_Chr_Reg[1][byMode] % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 2 ] = (DWORD)Map5_Chr_Reg[2][byMode] % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 3 ] = (DWORD)Map5_Chr_Reg[3][byMode] % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 4 ] = (DWORD)Map5_Chr_Reg[4][byMode] % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 5 ] = (DWORD)Map5_Chr_Reg[5][byMode] % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 6 ] = (DWORD)Map5_Chr_Reg[6][byMode] % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 7 ] = (DWORD)Map5_Chr_Reg[7][byMode] % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 0 ] = Map5_CHR_BANK( 0 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 1 ] = Map5_CHR_BANK( 1 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 2 ] = Map5_CHR_BANK( 2 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 3 ] = Map5_CHR_BANK( 3 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 4 ] = Map5_CHR_BANK( 4 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 5 ] = Map5_CHR_BANK( 5 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 6 ] = Map5_CHR_BANK( 6 ) % ( NesHeader.byVRomSize << 3 );
+      dwPage[ 7 ] = Map5_CHR_BANK( 7 ) % ( NesHeader.byVRomSize << 3 );
 
       PPUBANK[ 0 ] = VROMPAGE( dwPage[ 0 ] );
       PPUBANK[ 1 ] = VROMPAGE( dwPage[ 1 ] );
@@ -540,6 +562,8 @@ void Map5_RenderScreen( BYTE byMode )
       InfoNES_SetupChr();
       break;
   }
+
+  #undef Map5_CHR_BANK
 }
 
 /*-------------------------------------------------------------------*/

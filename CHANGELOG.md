@@ -1,6 +1,6 @@
 # CHANGELOG
 
-Graphics and colour fixes for *Mike Tyson's Punch-Out!!*, *Castlevania III* and *Full Quiet*, flickering fixed in mapper 30 games such as *Knight on the Moon*, *DataMan* no longer starts on a black screen, and two divide-by-zero bugs fixed - one in the sound code that could silence or mistune a channel in a number of games.
+Graphics and colour fixes for *Mike Tyson's Punch-Out!!*, *Castlevania III*, *Full Quiet* and several MMC5 games including *Romance of the Three Kingdoms II*, flickering fixed in mapper 30 games such as *Knight on the Moon*, *DataMan* no longer starts on a black screen, and two divide-by-zero bugs fixed - one in the sound code that could silence or mistune a channel in a number of games.
 
 
 # General Info
@@ -33,6 +33,8 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - Fixed the scrambled player, enemies and status bar in *Full Quiet Steam*. The game uses four times more graphics memory than the emulator was giving it.
 - Fixed *DataMan*, which started on a black screen.
 - Fixed *Castlevania III: Dracula's Curse* filling the playfield with status-bar lettering after the intro had been left running for a while. A mid-screen graphics switch came one scanline too late, and a single mistimed frame threw the game off for the rest of play.
+- Fixed the patches of wrong tiles left behind on the map of *Romance of the Three Kingdoms II* whenever a window closed. The emulator could not read back the extra memory these games use to pick graphics per tile, so it restored blanks.
+- Fixed the garbled title screen of *Shin 4 Nin Uchi Mahjong (JP)* and the corrupted map and portraits of *Genchou Hishi (JP)*, and a stray line of wrong tiles in *Just Breed (JP)*. All three leave one of the two graphics bank sets unused, which the emulator was reading from anyway.
 
 # v0.48
 
