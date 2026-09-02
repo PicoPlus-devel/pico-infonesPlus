@@ -163,9 +163,6 @@ extern DWORD PAD2_Bit;
 // Mirroring function
 extern void InfoNES_Mirroring(int nType);
 
-// Mapper 30 (UNROM 512) keeps its 32KB CHR RAM in its own buffer, not in PPURAM
-extern BYTE *Map30_Chr_Ram;
-
 /* -------- Optional mapper and APU blob hooks -------- */
 extern "C"
 {
@@ -337,8 +334,8 @@ static inline BYTE *ppuBankBase(int slot)
     return PPURAM;
   if (NesHeader.byVRomSize > 0)
     return VROM;
-  if (MapperNo == 30 && Map30_Chr_Ram)
-    return Map30_Chr_Ram;
+  if (MapperChrRam)
+    return MapperChrRam;
   return PPURAM;
 }
 
@@ -574,10 +571,10 @@ int Emulator_SaveState(const char *path)
     return -1;
   }
 
-  // Mapper-owned CHR RAM that lives outside PPURAM (mapper 30 keeps 32KB of its
-  // own). Written straight from the buffer so no second copy has to be
-  // allocated - an RP2040 has no room for one.
-  if (MapperNo == 30 && Map30_Chr_Ram && !w(Map30_Chr_Ram, MAP30_CHR_RAM_SIZE))
+  // CHR RAM the mapper keeps outside PPURAM (mappers 13, 30, 85, 96). Written
+  // straight from the buffer so no second copy has to be allocated - an RP2040
+  // has no room for one.
+  if (MapperChrRam && !w(MapperChrRam, MapperChrRamSize))
   {
     f_close(&fp);
     printf("SaveState: failed to write mapper CHR RAM\n");
@@ -686,8 +683,8 @@ int Emulator_LoadState(const char *path)
     return -1;
   }
 
-  // Mapper-owned CHR RAM stored outside PPURAM (see Emulator_SaveState)
-  if (MapperNo == 30 && Map30_Chr_Ram && !r(Map30_Chr_Ram, MAP30_CHR_RAM_SIZE))
+  // CHR RAM stored outside PPURAM (see Emulator_SaveState)
+  if (MapperChrRam && !r(MapperChrRam, MapperChrRamSize))
   {
     f_close(&fp);
     printf("LoadState: failed to read mapper CHR RAM\n");

@@ -288,6 +288,13 @@ extern int (*MapperBlobSize)();            // returns size of mapper blob
 extern void (*MapperSaveBlob)(BYTE *pBuf); // saves mapper blob to buffer
 extern void (*MapperLoadBlob)(BYTE *pBuf); // loads mapper blob from buffer
 
+// CHR RAM owned by a mapper and living outside PPURAM, registered by the
+// mapper's init. Non-owning: the mapper keeps the allocation and InfoNES_Fin
+// frees it. state.cpp uses these for PPUBANK index arithmetic and to
+// serialize the CHR RAM, so it needs no per-mapper knowledge.
+extern BYTE *MapperChrRam;
+extern DWORD MapperChrRamSize;
+
 /*-------------------------------------------------------------------*/
 /*  ROM information                                                  */
 /*-------------------------------------------------------------------*/

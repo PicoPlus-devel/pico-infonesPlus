@@ -148,6 +148,8 @@ void Map30_Init()
     if ( Map30_Chr_Ram )
       InfoNES_MemorySet( Map30_Chr_Ram, 0, MAP30_CHR_RAM_SIZE );
   }
+  MapperChrRam     = Map30_Chr_Ram;
+  MapperChrRamSize = Map30_Chr_Ram ? MAP30_CHR_RAM_SIZE : 0;
 
   /* Set ROM Banks: last 16KB fixed, first 16KB switchable (set by Map30_Sync) */
   ROMBANK2 = ROMLASTPAGE( 1 );

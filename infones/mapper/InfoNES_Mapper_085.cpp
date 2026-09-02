@@ -63,6 +63,14 @@ void Map85_Init()
     Map85_Chr_Ram = (BYTE *)Frens::f_malloc(0x100 * 0x400);
     InfoNES_MemorySet(Map85_Chr_Ram, 0, 0x100 * 0x400);
   }
+  /* Register it so state.cpp addresses PPUBANK[0..7] against the right base and
+   * carries the CHR RAM in the save state. Only for the CHR-RAM-only carts;
+   * a CHR-ROM VRC7 leaves this null and keeps addressing VROM. */
+  if (NesHeader.byVRomSize == 0)
+  {
+    MapperChrRam     = Map85_Chr_Ram;
+    MapperChrRamSize = Map85_Chr_Ram ? (0x100 * 0x400) : 0;
+  }
 
   SRAMBANK = SRAM;
 

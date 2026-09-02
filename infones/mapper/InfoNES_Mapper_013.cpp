@@ -4,6 +4,36 @@
 /*                                                                   */
 /*===================================================================*/
 
+/* CHR RAM (16KB = 4 x 4KB banks). PPU $0000-$0FFF is fixed to the first 4KB,
+ * $1000-$1FFF selects one of the four. That does not fit in the 8KB the core
+ * reserves at the bottom of PPURAM: CRAMPAGE() would put banks 2 and 3 on the
+ * nametables. Allocated lazily here, freed in InfoNES_Fin. */
+BYTE *Map13_Chr_Ram;
+
+#define Map13_CRAMPAGE(a) &Map13_Chr_Ram[((a) & 0x0F) * 0x400]
+
+/*-------------------------------------------------------------------*/
+/*  Select the 4KB CHR RAM bank at PPU $1000-$1FFF                   */
+/*-------------------------------------------------------------------*/
+static void Map13_SetChrBank( BYTE byBank )
+{
+  if ( Map13_Chr_Ram )
+  {
+    BYTE byPage = ( byBank & 0x03 ) << 2;
+    for ( int i = 0; i < 4; ++i )
+      PPUBANK[ 4 + i ] = Map13_CRAMPAGE( byPage + i );
+  }
+  else
+  {
+    /* Allocation failed (only possible on a RAM-constrained RP2040). Stay on
+     * bank 0 inside PPURAM: the wrong tiles are drawn, but the nametables are
+     * left alone. */
+    for ( int i = 0; i < 4; ++i )
+      PPUBANK[ 4 + i ] = CRAMPAGE( i );
+  }
+  InfoNES_SetupChr();
+}
+
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 13                                             */
 /*-------------------------------------------------------------------*/
@@ -45,16 +75,20 @@ void Map13_Init()
   ROMBANK2 = ROMPAGE( 2 );
   ROMBANK3 = ROMPAGE( 3 );
 
-  /* Set PPU Banks */
-  PPUBANK[ 0 ] = CRAMPAGE( 0 );
-  PPUBANK[ 1 ] = CRAMPAGE( 1 );
-  PPUBANK[ 2 ] = CRAMPAGE( 2 );
-  PPUBANK[ 3 ] = CRAMPAGE( 3 );
-  PPUBANK[ 4 ] = CRAMPAGE( 0 );
-  PPUBANK[ 5 ] = CRAMPAGE( 1 );
-  PPUBANK[ 6 ] = CRAMPAGE( 2 );
-  PPUBANK[ 7 ] = CRAMPAGE( 3 );
-  InfoNES_SetupChr();
+  /* Allocate the 16KB CHR RAM once; Map13_Init is also the reset entry point. */
+  if ( !Map13_Chr_Ram )
+  {
+    Map13_Chr_Ram = (BYTE *)Frens::f_malloc( MAP13_CHR_RAM_SIZE );
+    if ( Map13_Chr_Ram )
+      InfoNES_MemorySet( Map13_Chr_Ram, 0, MAP13_CHR_RAM_SIZE );
+  }
+  MapperChrRam     = Map13_Chr_Ram;
+  MapperChrRamSize = Map13_Chr_Ram ? MAP13_CHR_RAM_SIZE : 0;
+
+  /* Set PPU Banks: $0000-$0FFF fixed to the first 4KB, $1000-$1FFF bank 0 */
+  for ( int i = 0; i < 4; ++i )
+    PPUBANK[ i ] = Map13_Chr_Ram ? Map13_CRAMPAGE( i ) : CRAMPAGE( i );
+  Map13_SetChrBank( 0 );
 
   /* Set up wiring of the interrupt pin */
   K6502_Set_Int_Wiring( 1, 1 ); 
@@ -72,9 +106,5 @@ void Map13_Write( WORD wAddr, BYTE byData )
   ROMBANK3 = ROMPAGE((((byData&0x30)>>2)+3) % (NesHeader.byRomSize<<1));
 
   /* Set PPU Banks */
-  PPUBANK[ 4 ] = CRAMPAGE(((byData&0x03)<<2)+0);
-  PPUBANK[ 5 ] = CRAMPAGE(((byData&0x03)<<2)+1);
-  PPUBANK[ 6 ] = CRAMPAGE(((byData&0x03)<<2)+2);
-  PPUBANK[ 7 ] = CRAMPAGE(((byData&0x03)<<2)+3);
-  InfoNES_SetupChr();
+  Map13_SetChrBank( byData & 0x03 );
 }

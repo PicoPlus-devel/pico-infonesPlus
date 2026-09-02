@@ -301,6 +301,9 @@ int (*MapperBlobSize)();
 void (*MapperSaveBlob)(BYTE *pBuf);
 void (*MapperLoadBlob)(BYTE *pBuf);
 
+BYTE *MapperChrRam;
+DWORD MapperChrRamSize;
+
 /*-------------------------------------------------------------------*/
 /*  ROM information                                                  */
 /*-------------------------------------------------------------------*/
@@ -395,6 +398,9 @@ void InfoNES_Fin()
 #endif
   if (Map85_Chr_Ram) { Frens::f_free(Map85_Chr_Ram); Map85_Chr_Ram = nullptr; }
   if (Map30_Chr_Ram) { Frens::f_free(Map30_Chr_Ram); Map30_Chr_Ram = nullptr; }
+  if (Map13_Chr_Ram) { Frens::f_free(Map13_Chr_Ram); Map13_Chr_Ram = nullptr; }
+  if (Map96_Chr_Ram) { Frens::f_free(Map96_Chr_Ram); Map96_Chr_Ram = nullptr; }
+  MapperChrRam = nullptr; MapperChrRamSize = 0;
   if (DRAM) { Frens::f_free(DRAM); DRAM = nullptr; }
 }
 
@@ -555,6 +561,10 @@ int InfoNES_Reset()
   MapperBlobSize = nullptr;
   MapperSaveBlob = nullptr;
   MapperLoadBlob = nullptr;
+  // Cleared before pMapperInit() runs, so a mapper that owns no CHR RAM
+  // outside PPURAM simply leaves these null.
+  MapperChrRam = nullptr;
+  MapperChrRamSize = 0;
   // Only the MMC2/MMC4 CHR latch (mappers 9 and 10) needs to see sprite
   // pattern fetches; every other mapper leaves this null and pays nothing.
   MapperSprPPU = nullptr;

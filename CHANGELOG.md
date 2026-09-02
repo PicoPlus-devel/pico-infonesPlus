@@ -30,6 +30,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - Fixed a divide-by-zero in the sound code that could be reached whenever a pulse channel's frequency sweep ran its pitch down far enough. On the Pico this produced a wrong or dropped channel rather than a crash. *Laser Invasion*, *Gun Sight (JP)*, *Anticipation*, *Al Unser Jr. Turbo Racing*, *Defenders of Dynatron City* and the Japanese *Contra* and *Goemon* are among the games that hit it.
 - A game claiming MMC5 but shipping no character ROM no longer divides by zero on every scanline.
 - Fixed the flickering and garbled graphics in mapper 30 games, such as *Knight on the Moon*. These games carry four banks of graphics memory and the emulator only provided one, so the other three were landing on top of the screen layout.
+- Fixed the same problem in *Videomation*, where the drawing canvas was filled with garbage, and in the two *Oeka Kids* titles.
 
 # v0.48
 
