@@ -1,6 +1,6 @@
 # CHANGELOG
 
-A lot of mapper fixes: two new mappers, so *The Storied Sword* and *Boogerman II* run, plus fixes across thirteen more — among them *Mike Tyson's Punch-Out!!*, *Castlevania III*, *The Jetsons (JP)* and *Romance of the Three Kingdoms II*. The rest are colour, sound and timing fixes not tied to a cartridge type.
+A lot of mapper fixes: three new mappers, so *The Storied Sword*, *Boogerman II* and *Street Fighter IV* run, plus fixes across thirteen more — among them *Mike Tyson's Punch-Out!!*, *Castlevania III*, *The Jetsons (JP)* and *Romance of the Three Kingdoms II*. The rest are colour, sound and timing fixes not tied to a cartridge type.
 
 # General Info
 
@@ -26,6 +26,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 
 - **Mapper 111** is now supported, so *The Storied Sword* runs.
 - **Mapper 263** is now supported, so *Boogerman II - The Final Adventure* runs instead of showing a black screen.
+- **Mapper 208** is now supported, so *Street Fighter IV* runs.
 
 ## Fixes
 

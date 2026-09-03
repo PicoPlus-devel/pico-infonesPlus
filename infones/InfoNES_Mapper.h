@@ -606,6 +606,13 @@ void Map202_WriteSub(WORD wAddr, BYTE byData);
 void Map206_Init();
 void Map206_Write(WORD wAddr, BYTE byData);
 
+void Map208_Init();
+void Map208_Write(WORD wAddr, BYTE byData);
+void Map208_Apu(WORD wAddr, BYTE byData);
+BYTE Map208_ReadApu(WORD wAddr);
+void Map208_Sram(WORD wAddr, BYTE byData);
+void Map208_Set_CPU_Banks();
+
 void Map210_Init();
 void Map210_Write(WORD wAddr, BYTE byData);
 
