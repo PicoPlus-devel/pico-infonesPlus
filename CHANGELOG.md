@@ -44,7 +44,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - Fixed the flickering title screen in *Dungeons & Doomknights*, which also left the game unresponsive. Two causes: the emulator was missing a group of unofficial processor instructions the game uses, and it mistook the game's save-chip commands for bank switches. Adding those instructions also fixes *Street Fighter VI* and *Millionaire (PAL)*, which both started on a black screen.
 - Games that carry a newer cartridge header are now identified correctly instead of being run as whatever older cartridge type their number happened to match.
 - Fixed a long-standing bug where writing to one particular part of the screen layout could corrupt the stored colour palette.
-- Fixed the frozen, strobing screen in the 240p Test Suite's hill zone scroll test. Games that put their timing sprite on the very first line of the screen were never told it had been reached, so they spent whole frames waiting. This also repairs the garbled title screen of *Indiana Jones and the Last Crusade*, *Kid Kool* (and its Japanese version), and part of *Fighting Hero III*.
+- Fixed the frozen, strobing screen in the 240p Test Suite's hill zone scroll test. Games that put their timing sprite on the very first line of the screen were never told it had been reached, so they spent whole frames waiting. This also repairs the garbled title screen of *Indiana Jones and the Last Crusade*, *Kid Kool* (and its Japanese version).
 - Fixed the 240p Test Suite's 8000 Hz sound test being silent. The triangle channel was cut off above roughly 6 kHz by a rule that only applies to the pulse channels.
 
 # v0.48
