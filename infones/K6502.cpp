@@ -596,6 +596,299 @@ static void __not_in_flash_func(procNMI)()
   }
 }
 
+/* AA_ABS reads PC++ twice inside one expression, where C++ leaves the order
+   unspecified. step() happens to get the little-endian order the 6502 needs;
+   the same macro inside K6502_Undocumented() below was compiled the other way
+   round, which changed how a handful of already-crashed ROMs ran their garbage.
+   Sequence the two fetches here so this function cannot disagree with step().
+   (The macro itself is left alone - retargeting every legal opcode onto this is
+   a bigger change than this fix should carry.) */
+static __attribute__((noinline)) WORD K6502_AbsAddrSeq()
+{
+  WORD wLo = K6502_Read(PC++);
+  WORD wHi = K6502_Read(PC++);
+  return (WORD)(wLo | (wHi << 8));
+}
+
+/*-------------------------------------------------------------------*/
+/*  Undocumented instructions (the stable ones)                      */
+/*-------------------------------------------------------------------*/
+/*
+ * Deliberately NOT __not_in_flash_func. On RP2040 step() is copied into RAM
+ * for speed, and carrying these ~60 cases inside it cost 12.2KB of that RAM -
+ * enough to push the heap below the 32KB of CHR RAM a mapper 30 cartridge
+ * allocates, which made Knight on the Moon panic with out of memory. They are
+ * reached only through step()'s default case, and the games that use them at
+ * all execute a handful per frame (Dungeons & Doomknights: ~15 SBX), so
+ * running them from flash costs nothing measurable.
+ *
+ * noinline is load-bearing: the function is static with a single call site, so
+ * the compiler is otherwise free to fold all of it back into step() and put the
+ * 12KB straight back into RAM.
+ *
+ * Returns true when byCode was handled, in which case it has charged its own
+ * cycles; false leaves step() to charge the two cycles it always did.
+ */
+static __attribute__((noinline)) bool K6502_Undocumented(BYTE byCode)
+{
+  WORD wA0;
+  BYTE byD0;
+  BYTE byD1;
+  WORD wD0;
+
+  switch (byCode)
+  {
+      /*----------------------------------------------------------------*/
+      /*  Undocumented instructions (the stable ones)                    */
+    /*----------------------------------------------------------------*/
+
+    case 0x03: // SLO (Ind,X)
+      SLO(AA_IX);
+      CLK(8);
+      return true;
+    case 0x07: // SLO Zpg
+      SLO(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x0f: // SLO Abs
+      SLO(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x13: // SLO (Ind),Y
+      SLO(AA_IY);
+      CLK(8);
+      return true;
+    case 0x17: // SLO Zpg,X
+      SLO(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x1b: // SLO Abs,Y
+      SLO(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x1f: // SLO Abs,X
+      SLO(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x23: // RLA (Ind,X)
+      RLA(AA_IX);
+      CLK(8);
+      return true;
+    case 0x27: // RLA Zpg
+      RLA(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x2f: // RLA Abs
+      RLA(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x33: // RLA (Ind),Y
+      RLA(AA_IY);
+      CLK(8);
+      return true;
+    case 0x37: // RLA Zpg,X
+      RLA(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x3b: // RLA Abs,Y
+      RLA(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x3f: // RLA Abs,X
+      RLA(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x43: // SRE (Ind,X)
+      SRE(AA_IX);
+      CLK(8);
+      return true;
+    case 0x47: // SRE Zpg
+      SRE(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x4f: // SRE Abs
+      SRE(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x53: // SRE (Ind),Y
+      SRE(AA_IY);
+      CLK(8);
+      return true;
+    case 0x57: // SRE Zpg,X
+      SRE(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x5b: // SRE Abs,Y
+      SRE(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x5f: // SRE Abs,X
+      SRE(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x63: // RRA (Ind,X)
+      RRA(AA_IX);
+      CLK(8);
+      return true;
+    case 0x67: // RRA Zpg
+      RRA(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x6f: // RRA Abs
+      RRA(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x73: // RRA (Ind),Y
+      RRA(AA_IY);
+      CLK(8);
+      return true;
+    case 0x77: // RRA Zpg,X
+      RRA(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x7b: // RRA Abs,Y
+      RRA(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x7f: // RRA Abs,X
+      RRA(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x83: // SAX (Ind,X)
+      SAX(AA_IX);
+      CLK(6);
+      return true;
+    case 0x87: // SAX Zpg
+      SAX(AA_ZP);
+      CLK(3);
+      return true;
+    case 0x8f: // SAX Abs
+      SAX(K6502_AbsAddrSeq());
+      CLK(4);
+      return true;
+    case 0x97: // SAX Zpg,Y
+      SAX(AA_ZPY);
+      CLK(4);
+      return true;
+
+    case 0xa3: // LAX (Ind,X)
+      LAX(A_IX);
+      CLK(6);
+      return true;
+    case 0xa7: // LAX Zpg
+      LAX(A_ZP);
+      CLK(3);
+      return true;
+    case 0xab: // LAX #Imm (unstable on hardware; the common convention)
+      LAX(A_IMM);
+      CLK(2);
+      return true;
+    case 0xaf: // LAX Abs
+      LAX(A_ABS);
+      CLK(4);
+      return true;
+    case 0xb3: // LAX (Ind),Y
+      LAX(A_IY);
+      CLK(5);
+      return true;
+    case 0xb7: // LAX Zpg,Y
+      LAX(A_ZPY);
+      CLK(4);
+      return true;
+    case 0xbf: // LAX Abs,Y
+      LAX(A_ABSY);
+      CLK(4);
+      return true;
+
+    case 0xc3: // DCP (Ind,X)
+      DCP(AA_IX);
+      CLK(8);
+      return true;
+    case 0xc7: // DCP Zpg
+      DCP(AA_ZP);
+      CLK(5);
+      return true;
+    case 0xcf: // DCP Abs
+      DCP(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0xd3: // DCP (Ind),Y
+      DCP(AA_IY);
+      CLK(8);
+      return true;
+    case 0xd7: // DCP Zpg,X
+      DCP(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0xdb: // DCP Abs,Y
+      DCP(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0xdf: // DCP Abs,X
+      DCP(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0xe3: // ISC (Ind,X)
+      ISC(AA_IX);
+      CLK(8);
+      return true;
+    case 0xe7: // ISC Zpg
+      ISC(AA_ZP);
+      CLK(5);
+      return true;
+    case 0xef: // ISC Abs
+      ISC(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0xf3: // ISC (Ind),Y
+      ISC(AA_IY);
+      CLK(8);
+      return true;
+    case 0xf7: // ISC Zpg,X
+      ISC(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0xfb: // ISC Abs,Y
+      ISC(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0xff: // ISC Abs,X
+      ISC(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x0b: // ANC #Imm
+    case 0x2b: // ANC #Imm
+      ANC(A_IMM);
+      CLK(2);
+      return true;
+    case 0x4b: // ALR #Imm
+      ALR(A_IMM);
+      CLK(2);
+      return true;
+    case 0x6b: // ARR #Imm
+      ARR(A_IMM);
+      CLK(2);
+      return true;
+    case 0xcb: // SBX #Imm  (Dungeons & Doomknights' OAM clear loop)
+      SBX(A_IMM);
+      CLK(2);
+      return true;
+    case 0xeb: // SBC #Imm (mirror of 0xE9)
+      SBC(A_IMM);
+      CLK(2);
+      return true;
+
+    default:
+      return false;
+  }
+}
+
 static void __not_in_flash_func(step)(int wClocks)
 {
   /*
@@ -1492,252 +1785,6 @@ static void __not_in_flash_func(step)(int wClocks)
       break;
 
     case 0x0C: // TOP
-      /*----------------------------------------------------------------*/
-      /*  Undocumented instructions (the stable ones)                    */
-      /*----------------------------------------------------------------*/
-
-    case 0x03: // SLO (Ind,X)
-      SLO(AA_IX);
-      CLK(8);
-      break;
-    case 0x07: // SLO Zpg
-      SLO(AA_ZP);
-      CLK(5);
-      break;
-    case 0x0f: // SLO Abs
-      SLO(AA_ABS);
-      CLK(6);
-      break;
-    case 0x13: // SLO (Ind),Y
-      SLO(AA_IY);
-      CLK(8);
-      break;
-    case 0x17: // SLO Zpg,X
-      SLO(AA_ZPX);
-      CLK(6);
-      break;
-    case 0x1b: // SLO Abs,Y
-      SLO(AA_ABSY);
-      CLK(7);
-      break;
-    case 0x1f: // SLO Abs,X
-      SLO(AA_ABSX);
-      CLK(7);
-      break;
-
-    case 0x23: // RLA (Ind,X)
-      RLA(AA_IX);
-      CLK(8);
-      break;
-    case 0x27: // RLA Zpg
-      RLA(AA_ZP);
-      CLK(5);
-      break;
-    case 0x2f: // RLA Abs
-      RLA(AA_ABS);
-      CLK(6);
-      break;
-    case 0x33: // RLA (Ind),Y
-      RLA(AA_IY);
-      CLK(8);
-      break;
-    case 0x37: // RLA Zpg,X
-      RLA(AA_ZPX);
-      CLK(6);
-      break;
-    case 0x3b: // RLA Abs,Y
-      RLA(AA_ABSY);
-      CLK(7);
-      break;
-    case 0x3f: // RLA Abs,X
-      RLA(AA_ABSX);
-      CLK(7);
-      break;
-
-    case 0x43: // SRE (Ind,X)
-      SRE(AA_IX);
-      CLK(8);
-      break;
-    case 0x47: // SRE Zpg
-      SRE(AA_ZP);
-      CLK(5);
-      break;
-    case 0x4f: // SRE Abs
-      SRE(AA_ABS);
-      CLK(6);
-      break;
-    case 0x53: // SRE (Ind),Y
-      SRE(AA_IY);
-      CLK(8);
-      break;
-    case 0x57: // SRE Zpg,X
-      SRE(AA_ZPX);
-      CLK(6);
-      break;
-    case 0x5b: // SRE Abs,Y
-      SRE(AA_ABSY);
-      CLK(7);
-      break;
-    case 0x5f: // SRE Abs,X
-      SRE(AA_ABSX);
-      CLK(7);
-      break;
-
-    case 0x63: // RRA (Ind,X)
-      RRA(AA_IX);
-      CLK(8);
-      break;
-    case 0x67: // RRA Zpg
-      RRA(AA_ZP);
-      CLK(5);
-      break;
-    case 0x6f: // RRA Abs
-      RRA(AA_ABS);
-      CLK(6);
-      break;
-    case 0x73: // RRA (Ind),Y
-      RRA(AA_IY);
-      CLK(8);
-      break;
-    case 0x77: // RRA Zpg,X
-      RRA(AA_ZPX);
-      CLK(6);
-      break;
-    case 0x7b: // RRA Abs,Y
-      RRA(AA_ABSY);
-      CLK(7);
-      break;
-    case 0x7f: // RRA Abs,X
-      RRA(AA_ABSX);
-      CLK(7);
-      break;
-
-    case 0x83: // SAX (Ind,X)
-      SAX(AA_IX);
-      CLK(6);
-      break;
-    case 0x87: // SAX Zpg
-      SAX(AA_ZP);
-      CLK(3);
-      break;
-    case 0x8f: // SAX Abs
-      SAX(AA_ABS);
-      CLK(4);
-      break;
-    case 0x97: // SAX Zpg,Y
-      SAX(AA_ZPY);
-      CLK(4);
-      break;
-
-    case 0xa3: // LAX (Ind,X)
-      LAX(A_IX);
-      CLK(6);
-      break;
-    case 0xa7: // LAX Zpg
-      LAX(A_ZP);
-      CLK(3);
-      break;
-    case 0xab: // LAX #Imm (unstable on hardware; the common convention)
-      LAX(A_IMM);
-      CLK(2);
-      break;
-    case 0xaf: // LAX Abs
-      LAX(A_ABS);
-      CLK(4);
-      break;
-    case 0xb3: // LAX (Ind),Y
-      LAX(A_IY);
-      CLK(5);
-      break;
-    case 0xb7: // LAX Zpg,Y
-      LAX(A_ZPY);
-      CLK(4);
-      break;
-    case 0xbf: // LAX Abs,Y
-      LAX(A_ABSY);
-      CLK(4);
-      break;
-
-    case 0xc3: // DCP (Ind,X)
-      DCP(AA_IX);
-      CLK(8);
-      break;
-    case 0xc7: // DCP Zpg
-      DCP(AA_ZP);
-      CLK(5);
-      break;
-    case 0xcf: // DCP Abs
-      DCP(AA_ABS);
-      CLK(6);
-      break;
-    case 0xd3: // DCP (Ind),Y
-      DCP(AA_IY);
-      CLK(8);
-      break;
-    case 0xd7: // DCP Zpg,X
-      DCP(AA_ZPX);
-      CLK(6);
-      break;
-    case 0xdb: // DCP Abs,Y
-      DCP(AA_ABSY);
-      CLK(7);
-      break;
-    case 0xdf: // DCP Abs,X
-      DCP(AA_ABSX);
-      CLK(7);
-      break;
-
-    case 0xe3: // ISC (Ind,X)
-      ISC(AA_IX);
-      CLK(8);
-      break;
-    case 0xe7: // ISC Zpg
-      ISC(AA_ZP);
-      CLK(5);
-      break;
-    case 0xef: // ISC Abs
-      ISC(AA_ABS);
-      CLK(6);
-      break;
-    case 0xf3: // ISC (Ind),Y
-      ISC(AA_IY);
-      CLK(8);
-      break;
-    case 0xf7: // ISC Zpg,X
-      ISC(AA_ZPX);
-      CLK(6);
-      break;
-    case 0xfb: // ISC Abs,Y
-      ISC(AA_ABSY);
-      CLK(7);
-      break;
-    case 0xff: // ISC Abs,X
-      ISC(AA_ABSX);
-      CLK(7);
-      break;
-
-    case 0x0b: // ANC #Imm
-    case 0x2b: // ANC #Imm
-      ANC(A_IMM);
-      CLK(2);
-      break;
-    case 0x4b: // ALR #Imm
-      ALR(A_IMM);
-      CLK(2);
-      break;
-    case 0x6b: // ARR #Imm
-      ARR(A_IMM);
-      CLK(2);
-      break;
-    case 0xcb: // SBX #Imm  (Dungeons & Doomknights' OAM clear loop)
-      SBX(A_IMM);
-      CLK(2);
-      break;
-    case 0xeb: // SBC #Imm (mirror of 0xE9)
-      SBC(A_IMM);
-      CLK(2);
-      break;
-
     case 0x1C: // TOP
     case 0x3C: // TOP
     case 0x5C: // TOP
@@ -1749,7 +1796,10 @@ static void __not_in_flash_func(step)(int wClocks)
       break;
 
     default: // Unknown Instruction
-      CLK(2);
+      /* The stable undocumented opcodes live in K6502_Undocumented(), out
+         of this RAM-resident function - see the note there. */
+      if (!K6502_Undocumented(byCode))
+        CLK(2);
 #if 0
         InfoNES_MessageBox( "0x%02x is unknown instruction.\n", byCode ) ;
 #endif
