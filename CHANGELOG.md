@@ -1,6 +1,6 @@
 # CHANGELOG
 
-Two new mappers, so *The Storied Sword* and *Boogerman II* run, plus graphics and colour fixes for *Mike Tyson's Punch-Out!!*, *Castlevania III*, *Full Quiet*, *Rad Racer II*, *Gauntlet*, *Indiana Jones and the Last Crusade*, *Kid Kool*, *Mortal Kombat 3 - Special 56 Peoples* and several MMC5 games including *Romance of the Three Kingdoms II*, the flickering, unresponsive title screen in *Dungeons & Doomknights*, two 240p Test Suite failures, and two divide-by-zero bugs - one in the sound code that could silence or mistune a channel in a number of games.
+A lot of mapper fixes: two new mappers, so *The Storied Sword* and *Boogerman II* run, plus fixes across thirteen more — among them *Mike Tyson's Punch-Out!!*, *Castlevania III*, *The Jetsons (JP)* and *Romance of the Three Kingdoms II*. The rest are colour, sound and timing fixes not tied to a cartridge type.
 
 # General Info
 
@@ -29,24 +29,43 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 
 ## Fixes
 
-- Fixed the scrambled line of big letters on the boxer name screens in *Mike Tyson's Punch-Out!!*, and stray specks on the title screen of *Fire Emblem Gaiden (JP)*. Both games switch graphics banks from their sprites, which the emulator was ignoring.
-- Fixed wrong colours in games that set their palette in a way the emulator mishandled, among them *Mike Tyson's Punch-Out!!*, *Indiana Jones and the Last Crusade* and *Lunar Pool*. The same bug also made those games look different on different boards.
-- Fixed a divide-by-zero in the sound code that could be reached whenever a pulse channel's frequency sweep ran its pitch down far enough. On the Pico this produced a wrong or dropped channel rather than a crash. *Laser Invasion*, *Gun Sight (JP)*, *Anticipation*, *Al Unser Jr. Turbo Racing*, *Defenders of Dynatron City* and the Japanese *Contra* and *Goemon* are among the games that hit it.
-- A game claiming MMC5 but shipping no character ROM no longer divides by zero on every scanline, and no longer hands the picture unit invalid memory.
-- Fixed the flickering and garbled graphics in mapper 30 games, such as *Knight on the Moon*. These games carry four banks of graphics memory and the emulator only provided one, so the other three were landing on top of the screen layout.
-- Fixed the scrambled player, enemies and status bar in *Full Quiet Steam*. The game uses four times more graphics memory than the emulator was giving it.
-- Fixed *DataMan*, which started on a black screen.
-- Fixed *Castlevania III: Dracula's Curse* filling the playfield with status-bar lettering after the intro had been left running for a while. A mid-screen graphics switch came one scanline too late, and a single mistimed frame threw the game off for the rest of play.
-- Fixed the patches of wrong tiles left behind on the map of *Romance of the Three Kingdoms II* whenever a window closed. The emulator could not read back the extra memory these games use to pick graphics per tile, so it restored blanks.
-- Fixed the garbled title screen of *Shin 4 Nin Uchi Mahjong (JP)* and the corrupted map and portraits of *Genchou Hishi (JP)*, and a stray line of wrong tiles in *Just Breed (JP)*. All three leave one of the two graphics bank sets unused, which the emulator was reading from anyway.
-- Fixed the artifacts on screen and the broken title screen in *Mortal Kombat 3 - Special 56 Peoples* and other J.Y. Company games (mapper 90). The emulator was drawing the screen layout out of the graphics data.
-- Fixed the wrong game screen in *Rad Racer II*. Two causes: it is one of the few games with a fourth screen page on the cartridge, which the emulator never used, and the trick it uses to draw the road one line at a time lost track of the horizontal position, leaving the far half of the road 128 pixels off. The second fix also removes a stray line at the edge of the status bar in *Rally Bike*, *Dash Yarou (JP)* and *Knight Rider*. The four-screen fix also affects *Gauntlet* and *Napoleon Senki (JP)*.
-- Fixed the flickering title screen in *Dungeons & Doomknights*, which also left the game unresponsive. Two causes: the emulator was missing a group of unofficial processor instructions the game uses, and it mistook the game's save-chip commands for bank switches. Adding those instructions also fixes *Street Fighter VI* and *Millionaire (PAL)*, which both started on a black screen.
+| Game | Mapper | Symptom |
+|---|---|---|
+| *Mike Tyson's Punch-Out!!* | 9 | Scrambled line of big letters on the boxer name screens |
+| *Fire Emblem Gaiden (JP)* | 10 | Stray specks on the title screen |
+| *Mike Tyson's Punch-Out!!*, *Indiana Jones and the Last Crusade*, *Lunar Pool* | any | Wrong colours, and different colours on different boards |
+| *Laser Invasion*, *Gun Sight (JP)*, *Anticipation*, *Al Unser Jr. Turbo Racing*, *Defenders of Dynatron City*, *Contra (JP)*, *Goemon (JP)* | any | Wrong or dropped sound channel |
+| *240p Test Suite* | any | 8000 Hz sound test silent |
+| *240p Test Suite* | any | Hill zone scroll test frozen and strobing |
+| *Indiana Jones and the Last Crusade*, *Kid Kool* (and its Japanese version) | any | Garbled title screen |
+| *Castlevania III: Dracula's Curse* | 5 | Status-bar lettering fills the playfield after the intro has run a while |
+| *Romance of the Three Kingdoms II* | 5 | Patches of wrong tiles left on the map after a window closes |
+| *Shin 4 Nin Uchi Mahjong (JP)* | 5 | Garbled title screen |
+| *Genchou Hishi (JP)* | 5 | Corrupted map and portraits |
+| *Just Breed (JP)* | 5 | Stray line of wrong tiles |
+| Any MMC5 game shipping no character ROM | 5 | Division by zero on every scanline |
+| *Knight on the Moon* | 30 | Flickering, garbled graphics |
+| *Dungeons & Doomknights* | 30 | Flickering title screen, game unresponsive |
+| *Full Quiet Steam* | 4 | Scrambled player, enemies and status bar |
+| *Rad Racer II* | 4 | Wrong game screen, far half of the road 128 pixels off |
+| *Gauntlet* | 4 | Fourth screen page on the cartridge was unused |
+| *Napoleon Senki (JP)* | 77 | Fourth screen page on the cartridge was unused |
+| *Rally Bike*, *Dash Yarou (JP)* | 2 | Stray line at the edge of the status bar |
+| *Knight Rider* | 1 | Stray line at the edge of the status bar |
+| *DataMan* | 34 | Black screen |
+| *Street Fighter VI* | 4 | Black screen |
+| *Millionaire (PAL)* | 79 | Black screen |
+| *Mortal Kombat 3 - Special 56 Peoples* and other J.Y. Company games | 90 | Screen artifacts and a broken title screen |
+| *Teenage Mutant Ninja Turtles (JP)*, *Teenage Mutant Ninja Turtles 2 - The Manhattan Project (JP)*, *Batman 4*, *FIFA International 2' 96*, *Pizza Pop Mario* | 25 | Black screen |
+| *Gradius II (JP)*, *Bio Miracle Bokutte Upa (JP)* | 25 | Missing status bar |
+| *Racer Mini Yonku (JP)* | 25 | Garbled copyright line |
+| *The Jetsons - Cogswell's Caper (JP)* | 48 | Title screen unreadable |
+| *The Flintstones - The Rescue of Dino & Hoppy (JP)*, *Captain Saver (JP)*, *Bubble Bobble 2 (JP)*, *Don Doko Don 2 (JP)*, *Bakushou!! Jinsei Gekijou 3 (JP)* | 48 | Garbled sprites |
+
+Not tied to one game:
+
 - Games that carry a newer cartridge header are now identified correctly instead of being run as whatever older cartridge type their number happened to match.
-- Fixed a long-standing bug where writing to one particular part of the screen layout could corrupt the stored colour palette.
-- Fixed the frozen, strobing screen in the 240p Test Suite's hill zone scroll test. Games that put their timing sprite on the very first line of the screen were never told it had been reached, so they spent whole frames waiting. This also repairs the garbled title screen of *Indiana Jones and the Last Crusade*, *Kid Kool* (and its Japanese version).
-- Fixed the 240p Test Suite's 8000 Hz sound test being silent. The triangle channel was cut off above roughly 6 kHz by a rule that only applies to the pulse channels.
-- Fixed the black screen in the Japanese *Teenage Mutant Ninja Turtles* and *Teenage Mutant Ninja Turtles 2 - The Manhattan Project*, and in *Batman 4*, *FIFA International 2' 96* and *Pizza Pop Mario*. Their Konami cartridge comes in two wirings and only one of the two was handled. The same fix restores the missing status bars in *Gradius II (JP)* and *Bio Miracle Bokutte Upa (JP)* and the garbled copyright line in *Racer Mini Yonku (JP)*.
+- Writing to one particular part of the screen layout no longer corrupts the stored colour palette.
 
 # v0.48
 
