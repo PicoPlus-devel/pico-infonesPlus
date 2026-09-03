@@ -64,9 +64,11 @@ void Map49_Init()
   Map49_Chr6  = 6;
   Map49_Chr7  = 7;
 
+  /* CHR RAM images would otherwise get eight pointers into a null VROM. */
   for ( int nPage = 0; nPage < 8; ++nPage )
   {
-    PPUBANK[ nPage ] = VROMPAGE( nPage );
+    PPUBANK[ nPage ] = ( NesHeader.byVRomSize > 0 ) ? VROMPAGE( nPage )
+                                                    : CRAMPAGE( nPage );
   }
   InfoNES_SetupChr();
   

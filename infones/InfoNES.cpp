@@ -193,6 +193,7 @@ BYTE byVramWriteEnable;
 
 /* PPU Address and Scroll Latch Flag*/
 BYTE PPU_Latch_Flag;
+BYTE PPU_MidFrameAddrWrite;
 
 /* Up and Down Clipping Flag ( 0: non-clip, 1: clip ) */
 BYTE PPU_UpDown_Clip;
@@ -284,12 +285,28 @@ void (*MapperVSync)();
 void (*MapperHSync)();
 /* Callback at PPU read/write */
 void (*MapperPPU)(WORD wAddr); // mapper 96だけ？
+/* Callback at sprite pattern fetch - MMC2/MMC4 CHR latch only, else null */
+void (*MapperSprPPU)(WORD wAddr);
+/* False when MapperPPU is the do-nothing Map0_PPU stub, which is the case for
+   all but a handful of mappers. The background tile loop below consults this
+   instead of making ~33 indirect calls per scanline into a flash-resident
+   no-op - on RP2040 that call and its argument setup are pure loss. */
+bool MapperPPUActive;
+/* Set whenever OAM or the $2000 sprite bits change, so the MMC2/MMC4
+   sprite-fetch trigger list gets rebuilt before it is next used. */
+bool SprLatchDirty;
 /* Callback at Rendering Screen 1:BG, 0:Sprite */
 void (*MapperRenderScreen)(BYTE byMode);
 
 int (*MapperBlobSize)();
 void (*MapperSaveBlob)(BYTE *pBuf);
 void (*MapperLoadBlob)(BYTE *pBuf);
+
+BYTE *MapperChrRam;
+DWORD MapperChrRamSize;
+
+BYTE *MapperNtRam;
+DWORD MapperNtRamSize;
 
 /*-------------------------------------------------------------------*/
 /*  ROM information                                                  */
@@ -299,7 +316,10 @@ void (*MapperLoadBlob)(BYTE *pBuf);
 struct NesHeader_tag NesHeader;
 
 /* Mapper Number */
-BYTE MapperNo;
+WORD MapperNo;
+
+/* NES 2.0 submapper, 0 for iNES 1.0 images */
+BYTE SubMapperNo;
 
 /* Mirroring 0:Horizontal 1:Vertical */
 BYTE ROM_Mirroring;
@@ -378,12 +398,19 @@ void InfoNES_Fin()
   Frens::f_free(ChrBuf);
 #if PICO_RP2350
   if (Map5_Wram) { Frens::f_free(Map5_Wram); Map5_Wram = nullptr; }
-  if (Map5_Ex_Ram) { Frens::f_free(Map5_Ex_Ram); Map5_Ex_Ram = nullptr; }
   if (Map5_Ex_Vram) { Frens::f_free(Map5_Ex_Vram); Map5_Ex_Vram = nullptr; }
   if (Map5_Ex_Nam) { Frens::f_free(Map5_Ex_Nam); Map5_Ex_Nam = nullptr; }
   Map5_Gfx_Mode = 0;
 #endif
+  if (Map4_Chr_Ram) { Frens::f_free(Map4_Chr_Ram); Map4_Chr_Ram = nullptr; }
   if (Map85_Chr_Ram) { Frens::f_free(Map85_Chr_Ram); Map85_Chr_Ram = nullptr; }
+  if (Map30_Chr_Ram) { Frens::f_free(Map30_Chr_Ram); Map30_Chr_Ram = nullptr; }
+  if (Map13_Chr_Ram) { Frens::f_free(Map13_Chr_Ram); Map13_Chr_Ram = nullptr; }
+  if (Map96_Chr_Ram) { Frens::f_free(Map96_Chr_Ram); Map96_Chr_Ram = nullptr; }
+  if (Map111_Chr_Ram) { Frens::f_free(Map111_Chr_Ram); Map111_Chr_Ram = nullptr; }
+  SstFlash_Release();
+  MapperChrRam = nullptr; MapperChrRamSize = 0;
+  MapperNtRam = nullptr; MapperNtRamSize = 0;
   if (DRAM) { Frens::f_free(DRAM); DRAM = nullptr; }
 }
 
@@ -467,6 +494,7 @@ int InfoNES_Reset()
   {
     // Famicom Disk System: no iNES header, dispatch through synthetic mapper 20.
     MapperNo = 20;
+    SubMapperNo = 0;
     ROM_Mirroring = 0;
     ROM_SRAM = 0;
     ROM_Trainer = 0;
@@ -476,6 +504,7 @@ int InfoNES_Reset()
   {
     // Nintendo Sound Format: dispatch through synthetic mapper 31.
     MapperNo = 31;
+    SubMapperNo = 0;
     ROM_Mirroring = 0;
     ROM_SRAM = 0;
     ROM_Trainer = 0;
@@ -484,7 +513,20 @@ int InfoNES_Reset()
   else
   {
     // Mapper Number is 8bits. Always use lower 4bits of byInfo2 for compatibility with old ROMs.
-    MapperNo = (NesHeader.byInfo1 >> 4) | (NesHeader.byInfo2 & 0xf0);
+    MapperNo = (WORD)((NesHeader.byInfo1 >> 4) | (NesHeader.byInfo2 & 0xf0));
+    SubMapperNo = 0;
+
+    // NES 2.0 (byInfo2 bits 2-3 == 0b10) extends the mapper number with a
+    // third nibble in header byte 8 and adds a submapper in its high nibble.
+    // Without this a NES 2.0 image silently runs as the mapper named by its
+    // low 8 bits - Boogerman II is mapper 263 and was running as 7 (AxROM).
+    // Mapper 4 already reads byReserve[3] for its CHR RAM size, so the
+    // extended header is not a new dependency.
+    if ((NesHeader.byInfo2 & 0x0c) == 0x08)
+    {
+      MapperNo |= (WORD)(NesHeader.byReserve[0] & 0x0f) << 8;
+      SubMapperNo = (BYTE)(NesHeader.byReserve[0] >> 4);
+    }
 
     // Get information on the ROM
     ROM_Mirroring = NesHeader.byInfo1 & 1;
@@ -544,6 +586,15 @@ int InfoNES_Reset()
   MapperBlobSize = nullptr;
   MapperSaveBlob = nullptr;
   MapperLoadBlob = nullptr;
+  // Cleared before pMapperInit() runs, so a mapper that owns no CHR RAM
+  // outside PPURAM simply leaves these null.
+  MapperChrRam = nullptr;
+  MapperChrRamSize = 0;
+  MapperNtRam = nullptr;
+  MapperNtRamSize = 0;
+  // Only the MMC2/MMC4 CHR latch (mappers 9 and 10) needs to see sprite
+  // pattern fetches; every other mapper leaves this null and pays nothing.
+  MapperSprPPU = nullptr;
   // Mapper 31 in MapperTable is the synthetic NSF dispatch set up by the
   // IsNSF branch above, not the real NSF-compilation multicart mapper. A
   // .nes file whose header claims mapper 31 must still be reported as
@@ -562,6 +613,29 @@ int InfoNES_Reset()
       break;
   }
 
+  // An extended NES 2.0 number we do not implement. Many of those are
+  // supersets of the mapper named by the low 8 bits (260 -> 4, 281 -> 25,
+  // 516 -> 4, ...) and boot far enough to be playable that way, which is
+  // exactly what happened before NES 2.0 was parsed at all. Fall back to the
+  // 8-bit reading instead of refusing the ROM, and adopt the number so the
+  // save-state header and the on-screen mapper display agree.
+  if (MapperTable[nIdx].nMapperNo == -1 && MapperNo > 0xff)
+  {
+    WORD wLegacy = MapperNo & 0xff;
+    int nLegacy;
+    for (nLegacy = 0; MapperTable[nLegacy].nMapperNo != -1; ++nLegacy)
+    {
+      if (MapperTable[nLegacy].nMapperNo == wLegacy)
+        break;
+    }
+    if (MapperTable[nLegacy].nMapperNo != -1)
+    {
+      InfoNES_MessageBox("Mapper #%d unimplemented, falling back to #%d\n", MapperNo, wLegacy);
+      MapperNo = wLegacy;
+      nIdx = nLegacy;
+    }
+  }
+
   if (MapperTable[nIdx].nMapperNo == -1)
   {
     // Non support mapper
@@ -571,6 +645,10 @@ int InfoNES_Reset()
 
   // Set up a mapper initialization function
   MapperTable[nIdx].pMapperInit();
+
+  // Mappers that leave MapperPPU at the Map0_PPU stub want no per-tile
+  // callback at all; skip the indirect call for them (see MapperPPUActive).
+  MapperPPUActive = (MapperPPU != Map0_PPU);
 
   /*-------------------------------------------------------------------*/
   /*  Reset CPU                                                        */
@@ -622,6 +700,7 @@ void InfoNES_SetupPPU()
   // PPU_Scr_H = PPU_Scr_H_Next = PPU_Scr_H_Byte = PPU_Scr_H_Byte_Next = PPU_Scr_H_Bit = PPU_Scr_H_Bit_Next = 0;
   // PPU_Scr_V_Byte = PPU_Scr_V_Bit = 0;
   PPU_Scr_H_Byte = PPU_Scr_H_Bit = 0;
+  PPU_MidFrameAddrWrite = 0;
 
   // Reset PPU address
   PPU_Addr = 0;
@@ -644,8 +723,15 @@ void InfoNES_SetupPPU()
   for (nPage = 0; nPage < 16; ++nPage)
     PPUBANK[nPage] = &PPURAM[nPage * 0x400];
 
-  /* Mirroring of Name Table */
-  InfoNES_Mirroring(ROM_Mirroring);
+  /* Mirroring of Name Table. Header byte 6 bit 3 asks for four independent
+     name tables (Rad Racer II, Gauntlet, Napoleon Senki); PPU_MirrorTable
+     row 4 and the 4KB of name table space in the 16KB PPURAM have always
+     been here, nothing ever selected them. The MMC3 family already guards
+     its mirroring writes with if (!ROM_FourScr), so those carts keep what
+     is set here. Mappers that use bit 3 as a mode bit rather than as real
+     four-screen (30 = UNROM 512 one-screen, 111 = GTROM) clear ROM_FourScr
+     in their Init, which runs after this. */
+  InfoNES_Mirroring(ROM_FourScr ? 4 : ROM_Mirroring);
 
   /* Reset VRAM Write Enable */
   byVramWriteEnable = (NesHeader.byVRomSize == 0) ? 1 : 0;
@@ -872,6 +958,22 @@ int __not_in_flash_func(InfoNES_HSync)()
   // tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
   // PPU_Scr_V_Bit = tmpv & 7;
   // PPU_Scr_V_Byte = (tmpv >> 3) & 31;
+  /* The game moved the PPU address mid-frame (a $2006 pair) to select the row
+     for this line. On hardware the horizontal bits of v are reloaded from t at
+     dot 257 of the preceding line, which is before the fetches for this one -
+     so the row comes from the $2006 write but the column still comes from the
+     last $2005. Rad Racer II's road relies on it: it writes a fresh row every
+     scanline with a coarse X of 0, and without the reload the top half of the
+     road is drawn 128 pixels off. The unconditional reload further down runs
+     after the line is drawn and is what every other game needs, so this only
+     fires when a mid-frame $2006 actually happened. */
+  if (PPU_MidFrameAddrWrite)
+  {
+    PPU_MidFrameAddrWrite = 0;
+    if ((PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)) && PPU_Scanline < SCAN_UNKNOWN_START)
+      PPU_Addr = (PPU_Addr & ~0b10000011111) | (PPU_Temp & 0b10000011111);
+  }
+
   PPU_Scr_H_Byte = PPU_Addr & 31;
   PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
 
@@ -958,6 +1060,10 @@ int __not_in_flash_func(InfoNES_HSync)()
 
     // Get position of sprite #0
     InfoNES_GetSprHitY();
+
+    // Force a rebuild of the MMC2/MMC4 sprite-fetch trigger list even if no
+    // OAM write was seen (a game may leave OAM untouched for a whole frame).
+    SprLatchDirty = true;
   }
   else if (PPU_Scanline == SCAN_UNKNOWN_START)
   {
@@ -1038,6 +1144,106 @@ namespace
       spr += 1;
 #endif
     } while (spr < sprEnd);
+  }
+
+  /* MMC2/MMC4 CHR latch, sprite side.
+
+     Real PxROM/FxROM hardware flips its CHR latch on sprite pattern fetches
+     as well as background fetches, and Punch-Out!! depends on it: OAM holds
+     blank trigger sprites (tile $FD / $FE) whose only job is to switch the
+     4K CHR window part-way down the screen. Without this the big "MIKE
+     TYSON" letters below the trigger line are drawn from the wrong bank.
+
+     Scanning all 64 OAM entries on every scanline turned out to cost more
+     than it is worth (64 * 232 range tests a frame, which on RP2040 is worth
+     more than the whole latch fix saves), so the trigger sprites are
+     collected into a short event list and each scanline only walks that. The
+     list is rebuilt lazily: SprLatchDirty is raised by the $2003/$2004/$4014
+     OAM paths and by $2000 writes, and once per frame regardless, so a game
+     that rewrites OAM part-way down the screen still gets fresh triggers
+     while the common once-per-frame OAM DMA costs a single rebuild.
+
+     Order matters: the PPU walks OAM forwards and the last trigger of a
+     scanline wins, so the list is built in OAM order and walked in order.
+     Unlike the hardware this ignores the 8-sprites-per-line fetch limit -
+     a trigger that hardware would never reach because eight earlier sprites
+     already filled the line would still fire here. A game relying on that
+     would be broken on real hardware too, so nothing does.
+
+     Only bits 4-13 of the address survive the mapper's mask, so within a
+     tile the row only matters for picking the half of an 8x16 sprite. */
+  struct SprLatchEvent
+  {
+    BYTE yStart; // first scanline this pattern is fetched for
+    BYTE yEnd;   // one past the last
+    WORD addr;   // pattern address, as the mapper hook wants it
+  };
+  constexpr int SPR_LATCH_MAX = 16;
+  SprLatchEvent sprLatchEvents[SPR_LATCH_MAX];
+  int sprLatchCount;
+
+  // Is this tile index one of the two the MMC2/MMC4 latch reacts to?
+  inline bool isLatchTile(int tile) { return tile == 0xfd || tile == 0xfe; }
+
+  void sprLatchBuild()
+  {
+    SprLatchDirty = false;
+    sprLatchCount = 0;
+
+    const int spHeight = PPU_SP_Height;
+    const WORD table8x8 = (PPU_R0 & R0_SP_ADDR) ? 0x1000 : 0x0000;
+    const bool big = (PPU_R0 & R0_SP_SIZE) != 0;
+
+    for (const BYTE *spr = SPRRAM; spr < SPRRAM + 64 * 4; spr += 4)
+    {
+      const int y = spr[SPR_Y] + 1;
+      if (y + spHeight > 256)
+        continue; // Never fetched
+
+      const int ch = spr[SPR_CHR];
+
+      if (!big)
+      {
+        if (!isLatchTile(ch))
+          continue;
+        if (sprLatchCount == SPR_LATCH_MAX)
+          break;
+        sprLatchEvents[sprLatchCount++] = {
+            (BYTE)y, (BYTE)(y + spHeight), (WORD)(table8x8 | (ch << 4))};
+        continue;
+      }
+
+      /* 8x16: the two halves are separate tiles, and a vertical flip swaps
+         which half covers which scanlines. Emit an event per triggering
+         half so the row range carries that distinction. */
+      const int flip = (spr[SPR_ATTR] & SPR_ATTR_V_FLIP) ? 1 : 0;
+      const WORD table = (WORD)((ch & 1) << 12);
+      for (int half = 0; half < 2; ++half)
+      {
+        const int tile = (ch & 0xfe) | half;
+        if (!isLatchTile(tile))
+          continue;
+        if (sprLatchCount == SPR_LATCH_MAX)
+          break;
+        const int top = y + ((half ^ flip) ? 8 : 0);
+        sprLatchEvents[sprLatchCount++] = {
+            (BYTE)top, (BYTE)(top + 8), (WORD)(table | (tile << 4))};
+      }
+    }
+  }
+
+  /* Hardware fetches the sprite patterns for line N+1 during line N's
+     cycles 257-320, after that line's background fetches, so a trigger
+     first takes effect on the next line - the caller passes
+     PPU_Scanline + 1. */
+  void __not_in_flash_func(sprLatchLine)(int line)
+  {
+    for (int i = 0; i < sprLatchCount; ++i)
+    {
+      const SprLatchEvent &e = sprLatchEvents[i];
+      if (line >= e.yStart && line < e.yEnd)
+        MapperSprPPU(e.addr);
+    }
   }
 }
 
@@ -1123,6 +1329,13 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     //
     const int patternTableIdBG = PPU_R0 & R0_BG_ADDR ? 1 : 0;
     const int bankOfsBG = patternTableIdBG << 2;
+    /* PATTBL() of a background tile fetch reduces to this base OR'd with
+       (tile << 4) - the tile index the renderer has already loaded. Building
+       it that way saves re-reading the name table byte and rebuilding a
+       ChrBuf pointer just to subtract ChrBuf off it again, ~33 times per
+       scanline. Only mappers that actually watch PPU fetches (MMC2/MMC4 CHR
+       latch, mapper 96) pay the call at all - see MapperPPUActive. */
+    const int bgPatBase = (patternTableIdBG << 12) | (yOfsModBG << 1);
 
     /*-------------------------------------------------------------------*/
     /*  Rendering of the block of the left end                           */
@@ -1189,7 +1402,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 #endif
 
     // Callback at PPU read/write
-    MapperPPU(PATTBL(pbyChrData));
+    if (MapperPPUActive)
+      MapperPPU(bgPatBase | (*pbyNameTable << 4));
 
     ++nX;
     ++pbyNameTable;
@@ -1241,6 +1455,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[6] = readPal((pat1 >> 0) & 6);
       pPoint[7] = readPal((pat0 >> 0) & 6);
       pPoint += 8;
+      return ch;
     };
 
     for (; nX < 32; ++nX)
@@ -1259,12 +1474,12 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[7] = pPalTbl[pbyChrData[7]];
       pPoint += 8;
 #else
-      putBG(nX);
+      const int chBG = putBG(nX);
 #endif
 
       // Callback at PPU read/write
-      pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-      MapperPPU(PATTBL(pbyChrData));
+      if (MapperPPUActive)
+        MapperPPU(bgPatBase | (chBG << 4));
 
       ++pbyNameTable;
     }
@@ -1295,12 +1510,12 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint[7] = pPalTbl[pbyChrData[7]];
       pPoint += 8;
 #else
-      putBG(nX);
+      const int chBG = putBG(nX);
 #endif
 
       // Callback at PPU read/write
-      pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-      MapperPPU(PATTBL(pbyChrData));
+      if (MapperPPUActive)
+        MapperPPU(bgPatBase | (chBG << 4));
 
       ++pbyNameTable;
     }
@@ -1368,8 +1583,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 #endif
 
     // Callback at PPU read/write
-    pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-    MapperPPU(PATTBL(pbyChrData));
+    if (MapperPPUActive)
+      MapperPPU(bgPatBase | (*pbyNameTable << 4));
 
     /*-------------------------------------------------------------------*/
     /*  Backgroud Clipping                                               */
@@ -1662,6 +1877,15 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 
     util::WorkMeterMark(MARKER_SPRITE);
   }
+
+  /* MMC2/MMC4 CHR latch, sprite side. See sprLatchLine above. */
+  if (MapperSprPPU)
+  {
+    if (SprLatchDirty)
+      sprLatchBuild();
+    if (sprLatchCount && (PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)))
+      sprLatchLine(PPU_Scanline + 1);
+  }
 }
 
 /*===================================================================*/
@@ -1769,7 +1993,13 @@ void __not_in_flash_func(InfoNES_GetSprHitY)()
 
   auto *data = PPUBANK[bank] + addrOfs;
 
-  if ((SPRRAM[SPR_Y] + 1 <= SCAN_UNKNOWN_START) && (SPRRAM[SPR_Y] > 0))
+  /* A sprite whose OAM Y byte is 0 is drawn on scanline 1, so it can hit like
+     any other. Upstream InfoNES excluded Y == 0 here and declared "no sprite 0
+     hit" for the whole frame; the 240p Test Suite's hill zone scroll test puts
+     sprite 0 at Y = 0 and polls $2002 for the hit, so it burned a frame in that
+     loop every other frame - the screen appeared frozen and strobing. Games
+     park unused sprites at Y >= $EF, not at 0, which the upper bound covers. */
+  if (SPRRAM[SPR_Y] + 1 <= SCAN_UNKNOWN_START)
   {
     for (int nLine = 0; nLine < PPU_SP_Height; nLine++)
     {

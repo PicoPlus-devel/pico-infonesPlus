@@ -1,7 +1,6 @@
 # CHANGELOG
 
-New USB drive mode: show the SD card on your computer over USB straight from the settings menu. Plus a fix for a flickering band of wrong graphics in scrolling games such as *Final Fantasy* and *Zelda II*, and for the picture sitting too low on HSTX boards.
-
+A lot of mapper fixes: three new mappers, so *The Storied Sword*, *Boogerman II* and *Street Fighter IV* run, plus fixes across thirteen more — among them *Mike Tyson's Punch-Out!!*, *Castlevania III*, *The Jetsons (JP)* and *Romance of the Three Kingdoms II*. The rest are colour, sound and timing fixes not tied to a cartridge type.
 
 # General Info
 
@@ -20,6 +19,54 @@ This can be fixed permanently with the [flash_config](https://github.com/fhoedem
 Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then requires erasing the flash with `universal_flash_nuke.uf2` first), and even after the fix these boards top out at 252 MHz — so the **Overclock** setting, and with it the VRC7 audio of *Lagrange Point (JP)*, cannot be used on them.
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
+
+# v0.49
+
+## New
+
+- **Mapper 111** is now supported, so *The Storied Sword* runs.
+- **Mapper 263** is now supported, so *Boogerman II - The Final Adventure* runs instead of showing a black screen.
+- **Mapper 208** is now supported, so *Street Fighter IV* runs.
+
+## Fixes
+
+| Game | Mapper | Symptom |
+|---|---|---|
+| *Mike Tyson's Punch-Out!!* | 9 | Scrambled line of big letters on the boxer name screens |
+| *Fire Emblem Gaiden (JP)* | 10 | Stray specks on the title screen |
+| *Mike Tyson's Punch-Out!!*, *Indiana Jones and the Last Crusade*, *Lunar Pool* | any | Wrong colours, and different colours on different boards |
+| *Laser Invasion*, *Gun Sight (JP)*, *Anticipation*, *Al Unser Jr. Turbo Racing*, *Defenders of Dynatron City*, *Contra (JP)*, *Goemon (JP)* | any | Wrong or dropped sound channel |
+| *240p Test Suite* | any | 8000 Hz sound test silent |
+| *240p Test Suite* | any | Hill zone scroll test frozen and strobing |
+| *Indiana Jones and the Last Crusade*, *Kid Kool* (and its Japanese version) | any | Garbled title screen |
+| *Castlevania III: Dracula's Curse* | 5 | Status-bar lettering fills the playfield after the intro has run a while |
+| *Romance of the Three Kingdoms II* | 5 | Patches of wrong tiles left on the map after a window closes |
+| *Shin 4 Nin Uchi Mahjong (JP)* | 5 | Garbled title screen |
+| *Genchou Hishi (JP)* | 5 | Corrupted map and portraits |
+| *Just Breed (JP)* | 5 | Stray line of wrong tiles |
+| Any MMC5 game shipping no character ROM | 5 | Division by zero on every scanline |
+| *Knight on the Moon* | 30 | Flickering, garbled graphics |
+| *Dungeons & Doomknights* | 30 | Flickering title screen, game unresponsive |
+| *Full Quiet Steam* | 4 | Scrambled player, enemies and status bar |
+| *Rad Racer II* | 4 | Wrong game screen, far half of the road 128 pixels off |
+| *Gauntlet* | 4 | Fourth screen page on the cartridge was unused |
+| *Napoleon Senki (JP)* | 77 | Fourth screen page on the cartridge was unused |
+| *Rally Bike*, *Dash Yarou (JP)* | 2 | Stray line at the edge of the status bar |
+| *Knight Rider* | 1 | Stray line at the edge of the status bar |
+| *DataMan* | 34 | Black screen |
+| *Street Fighter VI* | 4 | Black screen |
+| *Millionaire (PAL)* | 79 | Black screen |
+| *Mortal Kombat 3 - Special 56 Peoples* and other J.Y. Company games | 90 | Screen artifacts and a broken title screen |
+| *Teenage Mutant Ninja Turtles (JP)*, *Teenage Mutant Ninja Turtles 2 - The Manhattan Project (JP)*, *Batman 4*, *FIFA International 2' 96*, *Pizza Pop Mario* | 25 | Black screen |
+| *Gradius II (JP)*, *Bio Miracle Bokutte Upa (JP)* | 25 | Missing status bar |
+| *Racer Mini Yonku (JP)* | 25 | Garbled copyright line |
+| *The Jetsons - Cogswell's Caper (JP)* | 48 | Title screen unreadable |
+| *The Flintstones - The Rescue of Dino & Hoppy (JP)*, *Captain Saver (JP)*, *Bubble Bobble 2 (JP)*, *Don Doko Don 2 (JP)*, *Bakushou!! Jinsei Gekijou 3 (JP)* | 48 | Garbled sprites |
+
+Not tied to one game:
+
+- Games that carry a newer cartridge header are now identified correctly instead of being run as whatever older cartridge type their number happened to match.
+- Writing to one particular part of the screen layout no longer corrupts the stored colour palette.
 
 # v0.48
 

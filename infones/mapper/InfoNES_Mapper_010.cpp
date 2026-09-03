@@ -14,6 +14,28 @@ struct Map10_Latch
 struct Map10_Latch latch3;    // Latch Selector #1
 struct Map10_Latch latch4;    // Latch Selector #2
 
+
+/*-------------------------------------------------------------------*/
+/*  Point a 4K CHR window at a bank (address in 1K pages)            */
+/*-------------------------------------------------------------------*/
+static void Map10_SetChrLo( BYTE byBank )
+{
+  PPUBANK[ 0 ] = VROMPAGE( byBank );
+  PPUBANK[ 1 ] = VROMPAGE( byBank + 1 );
+  PPUBANK[ 2 ] = VROMPAGE( byBank + 2 );
+  PPUBANK[ 3 ] = VROMPAGE( byBank + 3 );
+  InfoNES_SetupChr();
+}
+
+static void Map10_SetChrHi( BYTE byBank )
+{
+  PPUBANK[ 4 ] = VROMPAGE( byBank );
+  PPUBANK[ 5 ] = VROMPAGE( byBank + 1 );
+  PPUBANK[ 6 ] = VROMPAGE( byBank + 2 );
+  PPUBANK[ 7 ] = VROMPAGE( byBank + 3 );
+  InfoNES_SetupChr();
+}
+
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 10                                             */
 /*-------------------------------------------------------------------*/
@@ -44,6 +66,10 @@ void Map10_Init()
 
   /* Callback at PPU */
   MapperPPU = Map10_PPU;
+
+  /* Callback at sprite pattern fetch - the MMC4 latch, like MMC2's, is
+     driven by sprite fetches as well as background fetches. */
+  MapperSprPPU = Map10_PPU;
 
   /* Callback at Rendering Screen ( 1:BG, 0:Sprite ) */
   MapperRenderScreen = Map0_RenderScreen;
@@ -104,14 +130,7 @@ void Map10_Write( WORD wAddr, BYTE byData )
       latch3.lo_bank = byData;
 
       if (0xfd == latch3.state)
-      {
-        /* Set PPU Banks */
-        PPUBANK[ 0 ] = VROMPAGE( byData );
-        PPUBANK[ 1 ] = VROMPAGE( byData + 1 );
-        PPUBANK[ 2 ] = VROMPAGE( byData + 2 );
-        PPUBANK[ 3 ] = VROMPAGE( byData + 3 );     
-        InfoNES_SetupChr();
-      }
+        Map10_SetChrLo( byData );
       break;
 
     case 0xc000:
@@ -123,14 +142,7 @@ void Map10_Write( WORD wAddr, BYTE byData )
       latch3.hi_bank = byData;
 
       if (0xfe == latch3.state)
-      {
-        /* Set PPU Banks */
-        PPUBANK[ 0 ] = VROMPAGE( byData );
-        PPUBANK[ 1 ] = VROMPAGE( byData + 1 );
-        PPUBANK[ 2 ] = VROMPAGE( byData + 2 );
-        PPUBANK[ 3 ] = VROMPAGE( byData + 3 );     
-        InfoNES_SetupChr();
-      }
+        Map10_SetChrLo( byData );
       break;
 
     case 0xd000:
@@ -142,14 +154,7 @@ void Map10_Write( WORD wAddr, BYTE byData )
       latch4.lo_bank = byData;
 
       if (0xfd == latch4.state)
-      {
-        /* Set PPU Banks */
-        PPUBANK[ 4 ] = VROMPAGE( byData );
-        PPUBANK[ 5 ] = VROMPAGE( byData + 1 );
-        PPUBANK[ 6 ] = VROMPAGE( byData + 2 );
-        PPUBANK[ 7 ] = VROMPAGE( byData + 3 );    
-        InfoNES_SetupChr();
-      }
+        Map10_SetChrHi( byData );
       break;
 
     case 0xe000:
@@ -161,14 +166,7 @@ void Map10_Write( WORD wAddr, BYTE byData )
       latch4.hi_bank = byData;
 
       if (0xfe == latch4.state)
-      {
-        /* Set PPU Banks */
-        PPUBANK[ 4 ] = VROMPAGE( byData );
-        PPUBANK[ 5 ] = VROMPAGE( byData + 1 );
-        PPUBANK[ 6 ] = VROMPAGE( byData + 2 );
-        PPUBANK[ 7 ] = VROMPAGE( byData + 3 ); 
-        InfoNES_SetupChr();
-      }
+        Map10_SetChrHi( byData );
       break;
 
     case 0xf000:
@@ -183,51 +181,48 @@ void Map10_Write( WORD wAddr, BYTE byData )
 /*-------------------------------------------------------------------*/
 void Map10_PPU( WORD wAddr )
 {
-  /* Control Latch Selector */ 
+  /* Control Latch Selector.
+
+     Only an actual change of latch state has to reprogram the CHR window:
+     Map*_Write keeps PPUBANK[] in step whenever the selected bank register
+     is rewritten, so if the state already matches there is nothing to do.
+     This matters because tiles $FD and $FE are blank filler in every bank
+     of a MMC4 game and act purely as triggers, so the PPU fetches them
+     over and over - re-pointing four PPUBANK entries and calling
+     InfoNES_SetupChr() on every hit was pure overhead, and this callback
+     runs once per background tile fetch (~33 per scanline). */
   switch ( wAddr & 0x3ff0 )
   {
     case 0x0fd0:
-      /* Latch Control */
-      latch3.state = 0xfd;
-      /* Set PPU Banks */
-      PPUBANK[ 0 ] = VROMPAGE( latch3.lo_bank );
-      PPUBANK[ 1 ] = VROMPAGE( latch3.lo_bank + 1 );
-      PPUBANK[ 2 ] = VROMPAGE( latch3.lo_bank + 2 );
-      PPUBANK[ 3 ] = VROMPAGE( latch3.lo_bank + 3 );     
-      InfoNES_SetupChr();
+      if ( latch3.state != 0xfd )
+      {
+        latch3.state = 0xfd;
+        Map10_SetChrLo( latch3.lo_bank );
+      }
       break;
 
     case 0x0fe0:
-      /* Latch Control */
-      latch3.state = 0xfe;
-      /* Set PPU Banks */
-      PPUBANK[ 0 ] = VROMPAGE( latch3.hi_bank );
-      PPUBANK[ 1 ] = VROMPAGE( latch3.hi_bank + 1 );
-      PPUBANK[ 2 ] = VROMPAGE( latch3.hi_bank + 2 );
-      PPUBANK[ 3 ] = VROMPAGE( latch3.hi_bank + 3 );     
-      InfoNES_SetupChr();      
+      if ( latch3.state != 0xfe )
+      {
+        latch3.state = 0xfe;
+        Map10_SetChrLo( latch3.hi_bank );
+      }
       break;
 
     case 0x1fd0:
-      /* Latch Control */
-      latch4.state = 0xfd;
-      /* Set PPU Banks */
-      PPUBANK[ 4 ] = VROMPAGE( latch4.lo_bank );
-      PPUBANK[ 5 ] = VROMPAGE( latch4.lo_bank + 1 );
-      PPUBANK[ 6 ] = VROMPAGE( latch4.lo_bank + 2 );
-      PPUBANK[ 7 ] = VROMPAGE( latch4.lo_bank + 3 );     
-      InfoNES_SetupChr();
+      if ( latch4.state != 0xfd )
+      {
+        latch4.state = 0xfd;
+        Map10_SetChrHi( latch4.lo_bank );
+      }
       break;      
 
     case 0x1fe0:
-      /* Latch Control */
-      latch4.state = 0xfe;
-      /* Set PPU Banks */
-      PPUBANK[ 4 ] = VROMPAGE( latch4.hi_bank );
-      PPUBANK[ 5 ] = VROMPAGE( latch4.hi_bank + 1 );
-      PPUBANK[ 6 ] = VROMPAGE( latch4.hi_bank + 2 );
-      PPUBANK[ 7 ] = VROMPAGE( latch4.hi_bank + 3 );     
-      InfoNES_SetupChr();            
+      if ( latch4.state != 0xfe )
+      {
+        latch4.state = 0xfe;
+        Map10_SetChrHi( latch4.hi_bank );
+      }
       break;
   }
 }

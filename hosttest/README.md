@@ -33,7 +33,7 @@ g++ -O1 -g -fsanitize=address -std=gnu++17 \
   -DPICO_RP2350=1 -DNDEBUG -DPICO_NO_HARDWARE=1 \
   -I hosttest/shim -I infones -I pico_lib -I pico_shared -I . \
   -o hosttest/nes_host \
-  hosttest/host_main.cpp hosttest/stubs.cpp \
+  hosttest/host_main.cpp hosttest/stubs.cpp state.cpp \
   infones/InfoNES.cpp infones/K6502.cpp infones/InfoNES_Mapper.cpp \
   infones/InfoNES_pAPU.cpp infones/InfoNES_pAPU_Vrc7.cpp infones/InfoNES_Region.cpp \
   infones/InfoNES_NSF.cpp infones/InfoNES_FDS.cpp
@@ -81,9 +81,25 @@ save files (`*.SAV`) are written under `$NES_FAT_ROOT/saves/`.
 | `NES_HOLD_A=<frame>` | autofire button A (4 frames on / 4 off) from that frame on |
 | `NES_REGION=ntsc\|pal\|dendy` | override `InfoNES_DetectRegion` (CRC lookup still runs, but result is overridden) |
 | `NES_DUMP_REGS=1` | print PPU R0..R7, scanline, PAD1 latch, mapper every 100 frames |
+| `NES_FRAME_CRC=1` | print `CRC <frame> <crc32>` for every rendered frame |
 | `NES_DUMP_VRAM=1` | write `ppuram.bin` (16 KB) and `sprram.bin` (256 B) to outdir at exit |
 | `NES_FDS_DISK_SIDE=<N>` | (FDS only) call `fdsRequestSwap(N)` once at startup |
 | `NES_FAT_ROOT=<dir>` | root directory for FatFs paths; default `.` |
+| `NES_SAVE_STATE=<frame>` | call `Emulator_SaveState` at that frame |
+| `NES_LOAD_STATE=<frame>` | call `Emulator_LoadState` at that frame |
+| `NES_STATE_PATH=<file>` | state file for the two above; default `<outdir>/host.state` |
+
+`NES_SAVE_STATE` / `NES_LOAD_STATE` print `SAVESTATE frame=N rc=R` and
+`LOADSTATE frame=N rc=R`, so `state.cpp` can be exercised without a board. Note
+that FatFs paths are rewritten through `$NES_FAT_ROOT`, so pass `NES_FAT_ROOT=/`
+when the state path is absolute. To check that a load truly restores rather than
+merely returning 0, save at frame A in one run and load at frame B in a second,
+then confirm the second run's frame B+k CRC matches the first run's A+k:
+
+```sh
+NES_FAT_ROOT=/ NES_SAVE_STATE=250 NES_FRAME_CRC=1 ./hosttest/nes_host rom.nes 400 0 out >a.txt
+NES_FAT_ROOT=/ NES_LOAD_STATE=300 NES_FRAME_CRC=1 ./hosttest/nes_host rom.nes 400 0 out >b.txt
+```
 
 Button mask (per joypad, hex):
 
@@ -106,6 +122,14 @@ UP+A at frame 200 for 10 frames each.
 - Host runs are fully deterministic: no PSRAM latency, no input-timing
   variation. A bug that is *intermittent* on the device usually shows up
   here as its always-broken variant.
+- `NES_FRAME_CRC=1` is the cheap way to find where two builds diverge --
+  diff the two CRC streams instead of dumping thousands of images. Running
+  the *same* tree at `-O1` and `-O2` and diffing the streams is also a good
+  undefined-behaviour probe: the core should be bit-identical either way, and
+  it was not until the out-of-range `NesPalette[]` index was fixed.
+- Frames are unpacked the way the picoDVI build's `CC()` macro reads the
+  palette table (RGB444), so host output matches a picoDVI board. HSTX boards
+  use a different palette table in `main.cpp`, so their colours differ.
 - Audio is stubbed entirely (`InfoNES_SoundOutput` is a sink).
 - Zapper support compiles out (`ZAPPER_D3`/`ZAPPER_D4` are undefined here, so
   `ZAPPER_SUPPORTED` is 0), and `$4017` reads behave exactly as before.

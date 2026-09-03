@@ -200,6 +200,124 @@
   SETF(g_RORTable[byD1][byD0].byFlag); \
   K6502_Write(wA0, g_RORTable[byD1][byD0].byValue)
 
+// Undocumented Op.
+//
+// The 151 documented opcodes were always here, but everything else fell to
+// the default case, which charges two cycles and then executes the operand
+// bytes as instructions. Games do use these: Dungeons & Doomknights clears
+// its OAM buffer with the SBX ($CB) loop
+//   LDA #$FF / LDX #$00 / STA $0200,X ... / SBX #$F0 / BNE
+// and with $CB undecoded the $F0 operand ran as a BEQ, jumping the CPU into
+// an unrelated bank and taking the game down.
+//
+// Implemented here are the stable ones - the read-modify-write combinations
+// and the well-defined immediate forms. The unstable opcodes whose result
+// depends on analogue behaviour (ANE $8B, SHA/SHX/SHY/TAS $93 $9B $9C $9E
+// $9F) and JAM are deliberately left in the default case: no NES game can
+// rely on them, and JAM in particular would turn a glitch into a hang.
+//
+// The address is evaluated exactly once in each macro, which is why these
+// are not composed from the ASL/ROL/DEC/... macros above.
+
+// ASL memory, then ORA into A
+#define SLO(a)                     \
+  wA0 = a;                         \
+  byD0 = K6502_Read(wA0);          \
+  RSTF(FLAG_N | FLAG_Z | FLAG_C);  \
+  SETF(g_ASLTable[byD0].byFlag);   \
+  byD0 = g_ASLTable[byD0].byValue; \
+  K6502_Write(wA0, byD0);          \
+  A |= byD0;                       \
+  RSTF(FLAG_N | FLAG_Z);           \
+  SETF(g_byTestTable[A])
+
+// ROL memory, then AND into A
+#define RLA(a)                            \
+  byD1 = F & FLAG_C;                      \
+  wA0 = a;                                \
+  byD0 = K6502_Read(wA0);                 \
+  RSTF(FLAG_N | FLAG_Z | FLAG_C);         \
+  SETF(g_ROLTable[byD1][byD0].byFlag);    \
+  byD0 = g_ROLTable[byD1][byD0].byValue;  \
+  K6502_Write(wA0, byD0);                 \
+  A &= byD0;                              \
+  RSTF(FLAG_N | FLAG_Z);                  \
+  SETF(g_byTestTable[A])
+
+// LSR memory, then EOR into A
+#define SRE(a)                     \
+  wA0 = a;                         \
+  byD0 = K6502_Read(wA0);          \
+  RSTF(FLAG_N | FLAG_Z | FLAG_C);  \
+  SETF(g_LSRTable[byD0].byFlag);   \
+  byD0 = g_LSRTable[byD0].byValue; \
+  K6502_Write(wA0, byD0);          \
+  A ^= byD0;                       \
+  RSTF(FLAG_N | FLAG_Z);           \
+  SETF(g_byTestTable[A])
+
+// ROR memory, then ADC into A (the ADC sees the carry the ROR produced)
+#define RRA(a)                           \
+  byD1 = F & FLAG_C;                     \
+  wA0 = a;                               \
+  byD0 = K6502_Read(wA0);                \
+  RSTF(FLAG_N | FLAG_Z | FLAG_C);        \
+  SETF(g_RORTable[byD1][byD0].byFlag);   \
+  byD0 = g_RORTable[byD1][byD0].byValue; \
+  K6502_Write(wA0, byD0);                \
+  ADC(byD0)
+
+// Store A & X. Sets no flags.
+#define SAX(a) K6502_Write((a), (BYTE)(A & X))
+
+// Load A and X together
+#define LAX(a) \
+  A = (a);     \
+  X = A;       \
+  TEST(A)
+
+// DEC memory, then CMP against A
+#define DCP(a)                      \
+  wA0 = a;                          \
+  byD0 = (BYTE)(K6502_Read(wA0) - 1); \
+  K6502_Write(wA0, byD0);           \
+  CMP(byD0)
+
+// INC memory, then SBC from A
+#define ISC(a)                      \
+  wA0 = a;                          \
+  byD0 = (BYTE)(K6502_Read(wA0) + 1); \
+  K6502_Write(wA0, byD0);           \
+  SBC(byD0)
+
+// AND immediate, then copy bit 7 into carry
+#define ANC(a)                    \
+  A &= (a);                       \
+  RSTF(FLAG_N | FLAG_Z | FLAG_C); \
+  SETF(g_byTestTable[A] | ((A & 0x80) ? FLAG_C : 0))
+
+// AND immediate, then LSR A
+#define ALR(a) \
+  A &= (a);    \
+  LSRA
+
+// AND immediate, then ROR A, with carry from bit 6 and overflow from
+// bit 6 xor bit 5 of the result.
+#define ARR(a)                             \
+  A &= (a);                                \
+  A = (BYTE)((A >> 1) | ((F & FLAG_C) << 7)); \
+  RSTF(FLAG_N | FLAG_V | FLAG_Z | FLAG_C); \
+  SETF(g_byTestTable[A]                    \
+       | ((A & 0x40) ? FLAG_C : 0)         \
+       | (((A ^ (A << 1)) & 0x40) ? FLAG_V : 0))
+
+// X = (A & X) - immediate, carry set like a compare
+#define SBX(a)                    \
+  wD0 = (WORD)(A & X) - (a);      \
+  X = (BYTE)wD0;                  \
+  RSTF(FLAG_N | FLAG_Z | FLAG_C); \
+  SETF(g_byTestTable[X] | (wD0 < 0x100 ? FLAG_C : 0))
+
 // Jump Op.
 #define JSR      \
   wA0 = AA_ABS2; \
@@ -475,6 +593,299 @@ static void __not_in_flash_func(procNMI)()
 
       PC = K6502_ReadW(VECTOR_IRQ);
     }
+  }
+}
+
+/* AA_ABS reads PC++ twice inside one expression, where C++ leaves the order
+   unspecified. step() happens to get the little-endian order the 6502 needs;
+   the same macro inside K6502_Undocumented() below was compiled the other way
+   round, which changed how a handful of already-crashed ROMs ran their garbage.
+   Sequence the two fetches here so this function cannot disagree with step().
+   (The macro itself is left alone - retargeting every legal opcode onto this is
+   a bigger change than this fix should carry.) */
+static __attribute__((noinline)) WORD K6502_AbsAddrSeq()
+{
+  WORD wLo = K6502_Read(PC++);
+  WORD wHi = K6502_Read(PC++);
+  return (WORD)(wLo | (wHi << 8));
+}
+
+/*-------------------------------------------------------------------*/
+/*  Undocumented instructions (the stable ones)                      */
+/*-------------------------------------------------------------------*/
+/*
+ * Deliberately NOT __not_in_flash_func. On RP2040 step() is copied into RAM
+ * for speed, and carrying these ~60 cases inside it cost 12.2KB of that RAM -
+ * enough to push the heap below the 32KB of CHR RAM a mapper 30 cartridge
+ * allocates, which made Knight on the Moon panic with out of memory. They are
+ * reached only through step()'s default case, and the games that use them at
+ * all execute a handful per frame (Dungeons & Doomknights: ~15 SBX), so
+ * running them from flash costs nothing measurable.
+ *
+ * noinline is load-bearing: the function is static with a single call site, so
+ * the compiler is otherwise free to fold all of it back into step() and put the
+ * 12KB straight back into RAM.
+ *
+ * Returns true when byCode was handled, in which case it has charged its own
+ * cycles; false leaves step() to charge the two cycles it always did.
+ */
+static __attribute__((noinline)) bool K6502_Undocumented(BYTE byCode)
+{
+  WORD wA0;
+  BYTE byD0;
+  BYTE byD1;
+  WORD wD0;
+
+  switch (byCode)
+  {
+      /*----------------------------------------------------------------*/
+      /*  Undocumented instructions (the stable ones)                    */
+    /*----------------------------------------------------------------*/
+
+    case 0x03: // SLO (Ind,X)
+      SLO(AA_IX);
+      CLK(8);
+      return true;
+    case 0x07: // SLO Zpg
+      SLO(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x0f: // SLO Abs
+      SLO(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x13: // SLO (Ind),Y
+      SLO(AA_IY);
+      CLK(8);
+      return true;
+    case 0x17: // SLO Zpg,X
+      SLO(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x1b: // SLO Abs,Y
+      SLO(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x1f: // SLO Abs,X
+      SLO(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x23: // RLA (Ind,X)
+      RLA(AA_IX);
+      CLK(8);
+      return true;
+    case 0x27: // RLA Zpg
+      RLA(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x2f: // RLA Abs
+      RLA(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x33: // RLA (Ind),Y
+      RLA(AA_IY);
+      CLK(8);
+      return true;
+    case 0x37: // RLA Zpg,X
+      RLA(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x3b: // RLA Abs,Y
+      RLA(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x3f: // RLA Abs,X
+      RLA(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x43: // SRE (Ind,X)
+      SRE(AA_IX);
+      CLK(8);
+      return true;
+    case 0x47: // SRE Zpg
+      SRE(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x4f: // SRE Abs
+      SRE(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x53: // SRE (Ind),Y
+      SRE(AA_IY);
+      CLK(8);
+      return true;
+    case 0x57: // SRE Zpg,X
+      SRE(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x5b: // SRE Abs,Y
+      SRE(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x5f: // SRE Abs,X
+      SRE(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x63: // RRA (Ind,X)
+      RRA(AA_IX);
+      CLK(8);
+      return true;
+    case 0x67: // RRA Zpg
+      RRA(AA_ZP);
+      CLK(5);
+      return true;
+    case 0x6f: // RRA Abs
+      RRA(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0x73: // RRA (Ind),Y
+      RRA(AA_IY);
+      CLK(8);
+      return true;
+    case 0x77: // RRA Zpg,X
+      RRA(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0x7b: // RRA Abs,Y
+      RRA(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0x7f: // RRA Abs,X
+      RRA(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x83: // SAX (Ind,X)
+      SAX(AA_IX);
+      CLK(6);
+      return true;
+    case 0x87: // SAX Zpg
+      SAX(AA_ZP);
+      CLK(3);
+      return true;
+    case 0x8f: // SAX Abs
+      SAX(K6502_AbsAddrSeq());
+      CLK(4);
+      return true;
+    case 0x97: // SAX Zpg,Y
+      SAX(AA_ZPY);
+      CLK(4);
+      return true;
+
+    case 0xa3: // LAX (Ind,X)
+      LAX(A_IX);
+      CLK(6);
+      return true;
+    case 0xa7: // LAX Zpg
+      LAX(A_ZP);
+      CLK(3);
+      return true;
+    case 0xab: // LAX #Imm (unstable on hardware; the common convention)
+      LAX(A_IMM);
+      CLK(2);
+      return true;
+    case 0xaf: // LAX Abs
+      LAX(A_ABS);
+      CLK(4);
+      return true;
+    case 0xb3: // LAX (Ind),Y
+      LAX(A_IY);
+      CLK(5);
+      return true;
+    case 0xb7: // LAX Zpg,Y
+      LAX(A_ZPY);
+      CLK(4);
+      return true;
+    case 0xbf: // LAX Abs,Y
+      LAX(A_ABSY);
+      CLK(4);
+      return true;
+
+    case 0xc3: // DCP (Ind,X)
+      DCP(AA_IX);
+      CLK(8);
+      return true;
+    case 0xc7: // DCP Zpg
+      DCP(AA_ZP);
+      CLK(5);
+      return true;
+    case 0xcf: // DCP Abs
+      DCP(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0xd3: // DCP (Ind),Y
+      DCP(AA_IY);
+      CLK(8);
+      return true;
+    case 0xd7: // DCP Zpg,X
+      DCP(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0xdb: // DCP Abs,Y
+      DCP(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0xdf: // DCP Abs,X
+      DCP(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0xe3: // ISC (Ind,X)
+      ISC(AA_IX);
+      CLK(8);
+      return true;
+    case 0xe7: // ISC Zpg
+      ISC(AA_ZP);
+      CLK(5);
+      return true;
+    case 0xef: // ISC Abs
+      ISC(K6502_AbsAddrSeq());
+      CLK(6);
+      return true;
+    case 0xf3: // ISC (Ind),Y
+      ISC(AA_IY);
+      CLK(8);
+      return true;
+    case 0xf7: // ISC Zpg,X
+      ISC(AA_ZPX);
+      CLK(6);
+      return true;
+    case 0xfb: // ISC Abs,Y
+      ISC(K6502_AbsAddrSeq() + Y);
+      CLK(7);
+      return true;
+    case 0xff: // ISC Abs,X
+      ISC(K6502_AbsAddrSeq() + X);
+      CLK(7);
+      return true;
+
+    case 0x0b: // ANC #Imm
+    case 0x2b: // ANC #Imm
+      ANC(A_IMM);
+      CLK(2);
+      return true;
+    case 0x4b: // ALR #Imm
+      ALR(A_IMM);
+      CLK(2);
+      return true;
+    case 0x6b: // ARR #Imm
+      ARR(A_IMM);
+      CLK(2);
+      return true;
+    case 0xcb: // SBX #Imm  (Dungeons & Doomknights' OAM clear loop)
+      SBX(A_IMM);
+      CLK(2);
+      return true;
+    case 0xeb: // SBC #Imm (mirror of 0xE9)
+      SBC(A_IMM);
+      CLK(2);
+      return true;
+
+    default:
+      return false;
   }
 }
 
@@ -1385,7 +1796,10 @@ static void __not_in_flash_func(step)(int wClocks)
       break;
 
     default: // Unknown Instruction
-      CLK(2);
+      /* The stable undocumented opcodes live in K6502_Undocumented(), out
+         of this RAM-resident function - see the note there. */
+      if (!K6502_Undocumented(byCode))
+        CLK(2);
 #if 0
         InfoNES_MessageBox( "0x%02x is unknown instruction.\n", byCode ) ;
 #endif

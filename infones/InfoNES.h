@@ -109,6 +109,11 @@ extern WORD PPU_Addr;
 extern WORD PPU_Temp;
 extern WORD PPU_Increment;
 
+/* Set when a $2006 second write lands mid-frame with rendering on, i.e. the
+   game moved the PPU address to pick a different row for the line about to be
+   drawn. See InfoNES_HSync(). */
+extern BYTE PPU_MidFrameAddrWrite;
+
 extern BYTE PPU_Latch_Flag;
 extern BYTE PPU_UpDown_Clip;
 
@@ -269,6 +274,16 @@ extern void (*MapperVSync)();
 extern void (*MapperHSync)();
 /* Callback at PPU read/write */
 extern void (*MapperPPU)(WORD wAddr);
+/* Callback at sprite pattern fetch. Real MMC2/MMC4 hardware flips its CHR
+   latch on sprite fetches as well as background fetches, and Punch-Out!!
+   relies on it (blank trigger sprites holding tile $FD/$FE). Mappers 9 and
+   10 are the only ones that install this; it stays null everywhere else so
+   the sprite path costs one null test per scanline. */
+extern void (*MapperSprPPU)(WORD wAddr);
+/* False when MapperPPU is the Map0_PPU no-op stub - see InfoNES.cpp. */
+extern bool MapperPPUActive;
+/* Raised when OAM or the $2000 sprite bits change - see InfoNES.cpp. */
+extern bool SprLatchDirty;
 /* Callback at Rendering Screen 1:BG, 0:Sprite */
 extern void (*MapperRenderScreen)(BYTE byMode);
 
@@ -277,6 +292,23 @@ extern void (*MapperRenderScreen)(BYTE byMode);
 extern int (*MapperBlobSize)();            // returns size of mapper blob
 extern void (*MapperSaveBlob)(BYTE *pBuf); // saves mapper blob to buffer
 extern void (*MapperLoadBlob)(BYTE *pBuf); // loads mapper blob from buffer
+
+// CHR RAM owned by a mapper and living outside PPURAM, registered by the
+// mapper's init. Non-owning: the mapper keeps the allocation and InfoNES_Fin
+// frees it. state.cpp uses these for PPUBANK index arithmetic and to
+// serialize the CHR RAM, so it needs no per-mapper knowledge.
+extern BYTE *MapperChrRam;
+extern DWORD MapperChrRamSize;
+
+// Name table RAM owned by a mapper and living outside PPURAM: boards that
+// bank the name tables (mapper 111 / GTROM) or keep the extra four-screen
+// name tables in cartridge RAM. Only PPUBANK slots 8..11 are ever pointed
+// here; 12..15 stay the identity mapping into PPURAM so the $3000 alias and
+// the palette read-back at $3F00 keep working. May be a sub-range of
+// MapperChrRam (one SRAM chip); state.cpp detects that and does not write it
+// to the state file twice. Same non-owning contract as MapperChrRam.
+extern BYTE *MapperNtRam;
+extern DWORD MapperNtRamSize;
 
 /*-------------------------------------------------------------------*/
 /*  ROM information                                                  */
@@ -296,8 +328,12 @@ struct NesHeader_tag
 /* .nes File Header */
 extern struct NesHeader_tag NesHeader;
 
-/* Mapper No. */
-extern BYTE MapperNo;
+/* Mapper No. iNES packs 8 bits into header bytes 6 and 7; NES 2.0 adds a
+   third nibble in byte 8, so this has to be 16 bits wide. */
+extern WORD MapperNo;
+
+/* NES 2.0 submapper (header byte 8, high nibble). 0 for iNES 1.0 images. */
+extern BYTE SubMapperNo;
 
 /* Other */
 extern BYTE ROM_Mirroring;

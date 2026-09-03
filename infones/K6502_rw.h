@@ -296,6 +296,9 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       PPU_NameTableBank = NAME_TABLE0 + (PPU_R0 & R0_NAME_ADDR);
       PPU_BG_Base = (PPU_R0 & R0_BG_ADDR) ? ChrBuf + 256 * 64 : ChrBuf;
       PPU_SP_Base = (PPU_R0 & R0_SP_ADDR) ? ChrBuf + 256 * 64 : ChrBuf;
+      // Sprite size and sprite pattern table feed the MMC2/MMC4 sprite-fetch
+      // trigger list, so it has to be recomputed.
+      SprLatchDirty = true;
       PPU_SP_Height = (PPU_R0 & R0_SP_SIZE) ? 16 : 8;
 
       // Account for Loopy's scrolling discoveries
@@ -320,6 +323,7 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
     case 4: /* 0x2004 */
       // Write data to Sprite RAM
       SPRRAM[PPU_R3++] = byData;
+      SprLatchDirty = true; // MMC2/MMC4 sprite-fetch trigger list is stale
       break;
 
     case 5: /* 0x2005 */
@@ -348,6 +352,16 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
         /* Low */
         PPU_Temp = (PPU_Temp & 0xFF00) | (((WORD)byData) & 0x00FF);
         PPU_Addr = PPU_Temp;
+        /* A $2006 pair written while the picture is being drawn is how a game
+           picks a different name table row for the next line - Rad Racer II's
+           road does one per scanline. It clobbers the horizontal scroll in the
+           process, which on hardware does not matter: the PPU reloads the
+           horizontal bits of v from t at the end of every visible line, before
+           the affected line is fetched. This core runs a whole scanline's CPU
+           before drawing that line, so that reload has to happen here rather
+           than after the draw - see InfoNES_HSync(). */
+        if ((PPU_R1 & (R1_SHOW_SCR | R1_SHOW_SP)) && PPU_Scanline < SCAN_UNKNOWN_START)
+          PPU_MidFrameAddrWrite = 1;
         InfoNES_SetupScr();
       }
       else
@@ -375,23 +389,34 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       }
       else if (addr < 0x3f00) /* 0x2000 - 0x3eff */
       {
-        // Name Table and mirror
+        // Name Table and mirror. $3000-$3EFF mirrors $2000-$2EFF, and slots
+        // 12-15 are always the identity mapping into PPURAM, so the alias is
+        // kept coherent with a second store rather than a test on the read
+        // side. $2F00-$2FFF is the one range whose alias ($3F00-$3FFF) is
+        // overridden by palette RAM on hardware: copying it would overwrite
+        // the palette read-back bytes at PPURAM[0x3F00..0x3F1F]. Four-screen
+        // carts write the whole of $2C00-$2FFF, so this matters there.
         PPUBANK[addr >> 10][addr & 0x3ff] = byData;
-        PPUBANK[(addr ^ 0x1000) >> 10][addr & 0x3ff] = byData;
+        if ((addr & 0x3f00) != 0x2f00)
+          PPUBANK[(addr ^ 0x1000) >> 10][addr & 0x3ff] = byData;
       }
       else if (!(addr & 0xf)) /* 0x3f00 or 0x3f10 */
       {
-        // Palette mirror
+        // Palette mirror. Only the low 6 bits reach palette RAM: the PPU has
+        // no storage for bits 6-7, and NesPalette[] has exactly 64 entries,
+        // so an unmasked index would read past its end.
+        const BYTE byCol = byData & 0x3f;
         PPURAM[0x3f10] = PPURAM[0x3f14] = PPURAM[0x3f18] = PPURAM[0x3f1c] =
-            PPURAM[0x3f00] = PPURAM[0x3f04] = PPURAM[0x3f08] = PPURAM[0x3f0c] = byData;
+            PPURAM[0x3f00] = PPURAM[0x3f04] = PPURAM[0x3f08] = PPURAM[0x3f0c] = byCol;
         PalTable[0x00] = PalTable[0x04] = PalTable[0x08] = PalTable[0x0c] =
-            PalTable[0x10] = PalTable[0x14] = PalTable[0x18] = PalTable[0x1c] = NesPalette[byData] | 0x8000;
+            PalTable[0x10] = PalTable[0x14] = PalTable[0x18] = PalTable[0x1c] = NesPalette[byCol] | 0x8000;
       }
       else if (addr & 3)
       {
-        // Palette
-        PPURAM[addr] = byData;
-        PalTable[addr & 0x1f] = NesPalette[byData];
+        // Palette - see the 6-bit note above.
+        const BYTE byCol = byData & 0x3f;
+        PPURAM[addr] = byCol;
+        PalTable[addr & 0x1f] = NesPalette[byCol];
       }
     }
     break;
@@ -439,6 +464,7 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       // the DMA penalty, the scroll change leaked into the last few lines
       // of the HUD area.
       g_wPassedClocks += 514;
+      SprLatchDirty = true; // MMC2/MMC4 sprite-fetch trigger list is stale
       switch (byData >> 5)
       {
       case 0x0: /* RAM */
