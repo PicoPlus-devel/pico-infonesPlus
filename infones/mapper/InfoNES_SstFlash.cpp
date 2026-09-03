@@ -272,6 +272,11 @@ bool SstFlash_Write( struct SstFlash_tag *pFlash, WORD wAddr, BYTE byData, DWORD
 /*-------------------------------------------------------------------*/
 /*  Save state                                                        */
 /*-------------------------------------------------------------------*/
+/* The 8KB shadow page itself is deliberately NOT in here. state.cpp f_mallocs
+   a staging copy of the whole mapper blob on both save and load, and an 8KB
+   copy is more than an RP2040 can spare beside a mapper 30 cartridge's 32KB of
+   CHR RAM - Knight on the Moon panicked out of memory in both paths. The
+   shadow lives in a session-global buffer instead; see SstFlash_LoadBlob. */
 struct SstFlashState
 {
   BYTE byStep;
@@ -279,7 +284,6 @@ struct SstFlashState
   BYTE byHaveShadow;
   BYTE byPad;
   DWORD dwShadowPage;
-  BYTE byShadow[ SSTFLASH_PAGE_SIZE ];
 };
 
 int SstFlash_BlobSize()
@@ -296,30 +300,25 @@ void SstFlash_SaveBlob( struct SstFlash_tag *pFlash, BYTE *pBuf )
   pState->byPad = 0;
   pState->dwShadowPage = pFlash->dwShadowPage;
   pState->byHaveShadow = ( SstFlash_Shadow && pFlash->dwShadowPage != SSTFLASH_NO_PAGE ) ? 1 : 0;
-  if ( pState->byHaveShadow )
-    InfoNES_MemoryCopy( pState->byShadow, SstFlash_Shadow, SSTFLASH_PAGE_SIZE );
-  else
-    InfoNES_MemorySet( pState->byShadow, 0, SSTFLASH_PAGE_SIZE );
 }
 
 void SstFlash_LoadBlob( struct SstFlash_tag *pFlash, BYTE *pBuf )
 {
   struct SstFlashState *pState = (struct SstFlashState *)pBuf;
 
+  DWORD dwLive = pFlash->dwShadowPage;
+
   pFlash->byStep = pState->byStep;
   pFlash->byIdMode = pState->byIdMode;
-  pFlash->dwShadowPage = SSTFLASH_NO_PAGE;
 
-  if ( pState->byHaveShadow )
-  {
-    if ( !SstFlash_Shadow )
-      SstFlash_Shadow = (BYTE *)Frens::f_malloc( SSTFLASH_PAGE_SIZE );
-    if ( SstFlash_Shadow )
-    {
-      InfoNES_MemoryCopy( SstFlash_Shadow, pState->byShadow, SSTFLASH_PAGE_SIZE );
-      pFlash->dwShadowPage = pState->dwShadowPage;
-    }
-  }
+  /* Whatever this session has already programmed stays where it is: if the
+     shadow still holds the page the state was saved with, keep it, otherwise
+     fall back to the real ROM. A state reloaded in a later session therefore
+     loses flash writes made before it was taken - which costs nothing, because
+     those writes never survived a reboot in the first place. */
+  pFlash->dwShadowPage =
+      ( pState->byHaveShadow && SstFlash_Shadow && dwLive == pState->dwShadowPage )
+          ? pState->dwShadowPage : SSTFLASH_NO_PAGE;
 
   /* ID mode needs its page back before the mapper re-applies its banks. */
   if ( pFlash->byIdMode && !SstFlash_GetIdPage() )

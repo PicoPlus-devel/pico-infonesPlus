@@ -750,6 +750,20 @@ int Emulator_LoadState(const char *path)
     Frens::f_free(coreDyn);
     return -1;
   }
+  // The blob is a raw struct, so a file written when this mapper's blob had a
+  // different layout cannot be read back. Sizes do change: mapper 30 grew from
+  // one byte to a struct when flash emulation landed, and a mapper that gained
+  // a blob it never had would be handed a buffer smaller than it reads. Without
+  // this the mismatch is an out-of-bounds read on the heap.
+  if (mapperSize && MapperLoadBlob && MapperBlobSize &&
+      mapperSize != (size_t)MapperBlobSize())
+  {
+    f_close(&fp);
+    printf("LoadState: mapper blob is %u bytes, this build expects %u - refusing state\n",
+           (unsigned)mapperSize, (unsigned)MapperBlobSize());
+    Frens::f_free(coreDyn);
+    return -1;
+  }
   BYTE  *mapperBuf = nullptr;
   if (mapperSize && MapperLoadBlob)
   {
