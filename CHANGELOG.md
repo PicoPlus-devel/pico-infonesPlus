@@ -46,6 +46,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 - Fixed a long-standing bug where writing to one particular part of the screen layout could corrupt the stored colour palette.
 - Fixed the frozen, strobing screen in the 240p Test Suite's hill zone scroll test. Games that put their timing sprite on the very first line of the screen were never told it had been reached, so they spent whole frames waiting. This also repairs the garbled title screen of *Indiana Jones and the Last Crusade*, *Kid Kool* (and its Japanese version).
 - Fixed the 240p Test Suite's 8000 Hz sound test being silent. The triangle channel was cut off above roughly 6 kHz by a rule that only applies to the pulse channels.
+- Fixed the black screen in the Japanese *Teenage Mutant Ninja Turtles* and *Teenage Mutant Ninja Turtles 2 - The Manhattan Project*, and in *Batman 4*, *FIFA International 2' 96* and *Pizza Pop Mario*. Their Konami cartridge comes in two wirings and only one of the two was handled. The same fix restores the missing status bars in *Gradius II (JP)* and *Bio Miracle Bokutte Upa (JP)* and the garbled copyright line in *Racer Mini Yonku (JP)*.
 
 # v0.48
 

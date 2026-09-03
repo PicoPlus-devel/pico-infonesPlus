@@ -223,7 +223,8 @@ void Map24_HSync();
 
 void Map25_Init();
 void Map25_Write(WORD wAddr, BYTE byData);
-void Map25_Sync_Vrom(int nBank);
+void Map25_Set_Prg();
+void Map25_Set_Chr(int nBank);
 void Map25_HSync();
 
 void Map26_Init();
