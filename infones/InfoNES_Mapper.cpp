@@ -17,6 +17,7 @@
 #include "FrensHelpers.h"
 #include "K6502.h"
 #include "InfoNES_NSF.h"
+#include "InfoNES_Region.h"
 #include <pico.h>
 #if PICO_RP2350
 #include "InfoNES_FDS.h"
@@ -40,9 +41,7 @@ const struct MapperTable_tag MapperTable[] =
         {2, Map2_Init},
         {3, Map3_Init},
         {4, Map4_Init},
-#if PICO_RP2350
         {5, Map5_Init},
-#endif
         // {6, Map6_Init},
         {7, Map7_Init},
         {8, Map8_Init},
@@ -155,6 +154,7 @@ const struct MapperTable_tag MapperTable[] =
         {191, Map191_Init},
         {193, Map193_Init},
         {194, Map194_Init},
+        {196, Map196_Init},
         {200, Map200_Init},
         {201, Map201_Init},
         {202, Map202_Init},
@@ -201,9 +201,7 @@ const struct MapperTable_tag MapperTable[] =
 #include "mapper/InfoNES_Mapper_002.cpp"
 #include "mapper/InfoNES_Mapper_003.cpp"
 #include "mapper/InfoNES_Mapper_004.cpp"
-#if PICO_RP2350
 #include "mapper/InfoNES_Mapper_005.cpp"
-#endif
 // #include "mapper/InfoNES_Mapper_006.cpp"
 #include "mapper/InfoNES_Mapper_007.cpp"
 #include "mapper/InfoNES_Mapper_008.cpp"
@@ -313,6 +311,7 @@ const struct MapperTable_tag MapperTable[] =
 #include "mapper/InfoNES_Mapper_191.cpp"
 #include "mapper/InfoNES_Mapper_193.cpp"
 #include "mapper/InfoNES_Mapper_194.cpp"
+#include "mapper/InfoNES_Mapper_196.cpp"
 #include "mapper/InfoNES_Mapper_200.cpp"
 #include "mapper/InfoNES_Mapper_201.cpp"
 #include "mapper/InfoNES_Mapper_202.cpp"

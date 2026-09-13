@@ -42,9 +42,11 @@
 #include "InfoNES_NSF.h"
 #include "InfoNES_FDS.h"
 #include "K6502.h"
+#include "InfoNES_Region.h"
 #include <assert.h>
 #include <pico.h>
 #include <tuple>
+#include <type_traits>
 #include <cstdio>
 #include <cstdlib>
 #include <util/work_meter.h>
@@ -141,6 +143,7 @@ BYTE *VROM;
 /* PPU Register */
 BYTE PPU_R0;
 BYTE PPU_R1;
+BYTE PPU_R1_Line;
 BYTE PPU_R2;
 BYTE PPU_R3;
 BYTE PPU_R7;
@@ -236,6 +239,62 @@ WORD STEP_PER_SCANLINE = 114;
 WORD STEP_PER_FRAME    = 29780;
 WORD SCAN_VBLANK_START = 241;
 WORD SCAN_VBLANK_END   = 261;
+/* Cycle a scanline hands back, as a fraction - see InfoNES.h. Zero (the
+   default) is the flat scanline this core has always run. */
+WORD SCANLINE_FRAC_NUM = 0;
+WORD SCANLINE_FRAC_DEN = 1;
+static WORD ScanlineFrac = 0;
+
+/* ROMs that get the true NTSC scanline length instead of a flat 114.
+   Switching every game over is the accurate thing to do and was tried first: a
+   sweep of the 3360 local ROMs at 400 frames each had it fix Gozonji - Yaji
+   Kita Chin Douchuu and Kickle Cubicle as well, but also hang Genpei Touma Den
+   - Computer Boardgame, which then never leaves the sprite 0 wait in its NMI
+   handler because the frame it lands on has rendering switched off. Until that
+   is understood the shorter scanline is opt-in, one ROM at a time. */
+static const uint32_t Ntsc_Exact_Frame_Crcs[] =
+{
+  0xF08E362C,   /* Project Blue (USA) (Aftermarket) (Unl), mapper 111 */
+  0x8BCA5146,   /* Indiana Jones and the Last Crusade (USA) (Taito) - see Hblank_Draw_Crcs */
+};
+
+/* ROMs that turn rendering off and back on in the middle of a line. The line
+   is drawn from $2001 as it is at the end of its CPU slice, so it came out
+   black. For these a layer that was on at any point in the slice is drawn -
+   see InfoNES_DrawLine(). Doing it for every game was tried: checked against
+   Mesen it also fixes some letterbox edges, but just as often adds a line under
+   a status bar (Burai Fighter, Isolated Warrior, Dizzy), so it is opt-in. */
+static const uint32_t R1_Line_Crcs[] =
+{
+  0x10CB935F,   /* Lion King, The (Unl) */
+  0x3A6577CD,   /* Jurassic Park - The Lost World (Unl) */
+};
+static BYTE PPU_R1_LineMask = 0;
+
+/* ROMs whose lines are drawn where the visible part of the scanline ends
+   (dot 256) instead of after the whole CPU slice, so PPU writes made in
+   horizontal blank land on the next line, as on hardware. With it, the title
+   screens below match Mesen row for row.
+
+   Indiana Jones and the Last Crusade (Taito) paints its sky gradient with
+   rendering off, PPU address to $3F00, a new colour, the scroll address
+   restored, rendering on - split over the end of one line and the start of the
+   next. Drawn at the end of the slice those lines came out black or with the
+   logo missing, and the $2006 restore moved the lower half of the logo a line
+   up or down from frame to frame. It also needs the exact frame length
+   (Ntsc_Exact_Frame_Crcs) so the writes stay at the same place in the line.
+
+   Battletoads & Double Dragon waits for a sprite 0 hit at X=209 on line 87 and
+   then switches the background pattern table with $2000, which on hardware is
+   in horizontal blank. Here the write fell either side of the slice boundary,
+   so line 87 flickered between the two tile sets. */
+static const uint32_t Hblank_Draw_Crcs[] =
+{
+  0x8BCA5146,   /* Indiana Jones and the Last Crusade (USA) (Taito) */
+  0xCEB65B06,   /* Battletoads-Double Dragon (USA) */
+  0x23D7D48F,   /* Battletoads-Double Dragon (Europe) */
+};
+static WORD SCANLINE_DRAW_STEP = 0;
 
 /* Table for Mirroring */
 BYTE PPU_MirrorTable[][4] =
@@ -307,6 +366,9 @@ DWORD MapperChrRamSize;
 
 BYTE *MapperNtRam;
 DWORD MapperNtRamSize;
+
+BYTE *MapperPrgRam;
+DWORD MapperPrgRamSize;
 
 /*-------------------------------------------------------------------*/
 /*  ROM information                                                  */
@@ -396,12 +458,10 @@ void InfoNES_Fin()
   Frens::f_free(PPURAM);
   Frens::f_free(SPRRAM);
   Frens::f_free(ChrBuf);
-#if PICO_RP2350
   if (Map5_Wram) { Frens::f_free(Map5_Wram); Map5_Wram = nullptr; }
   if (Map5_Ex_Vram) { Frens::f_free(Map5_Ex_Vram); Map5_Ex_Vram = nullptr; }
   if (Map5_Ex_Nam) { Frens::f_free(Map5_Ex_Nam); Map5_Ex_Nam = nullptr; }
   Map5_Gfx_Mode = 0;
-#endif
   if (Map4_Chr_Ram) { Frens::f_free(Map4_Chr_Ram); Map4_Chr_Ram = nullptr; }
   if (Map85_Chr_Ram) { Frens::f_free(Map85_Chr_Ram); Map85_Chr_Ram = nullptr; }
   if (Map30_Chr_Ram) { Frens::f_free(Map30_Chr_Ram); Map30_Chr_Ram = nullptr; }
@@ -411,6 +471,7 @@ void InfoNES_Fin()
   SstFlash_Release();
   MapperChrRam = nullptr; MapperChrRamSize = 0;
   MapperNtRam = nullptr; MapperNtRamSize = 0;
+  MapperPrgRam = nullptr; MapperPrgRamSize = 0;
   if (DRAM) { Frens::f_free(DRAM); DRAM = nullptr; }
 }
 
@@ -592,6 +653,8 @@ int InfoNES_Reset()
   MapperChrRamSize = 0;
   MapperNtRam = nullptr;
   MapperNtRamSize = 0;
+  MapperPrgRam = nullptr;
+  MapperPrgRamSize = 0;
   // Only the MMC2/MMC4 CHR latch (mappers 9 and 10) needs to see sprite
   // pattern fetches; every other mapper leaves this null and pays nothing.
   MapperSprPPU = nullptr;
@@ -777,6 +840,15 @@ namespace
 void InfoNES_SetRegion(int region)
 {
   s_region = region;
+  /* Cleared for every ROM: these outlive a single game, the menu comes back
+     between them, and only the ROMs listed below opt in. */
+  SCANLINE_FRAC_NUM = 0;
+  SCANLINE_FRAC_DEN = 1;
+  ScanlineFrac = 0;
+  PPU_R1_LineMask = 0;
+  for (uint32_t dwCrc : R1_Line_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      PPU_R1_LineMask = R1_SHOW_SCR | R1_SHOW_SP;
   switch (region)
   {
   case INFONES_REGION_PAL:
@@ -804,8 +876,20 @@ void InfoNES_SetRegion(int region)
     STEP_PER_FRAME    = 29780;
     SCAN_VBLANK_START = 241;
     SCAN_VBLANK_END   = 261;
+    /* 341 PPU dots is exactly 113 2/3 CPU cycles, so 114 - 1/3. */
+    for (uint32_t dwCrc : Ntsc_Exact_Frame_Crcs)
+      if (dwCrc == InfoNES_RomCrc)
+      {
+        SCANLINE_FRAC_NUM = 1;
+        SCANLINE_FRAC_DEN = 3;
+      }
     break;
   }
+
+  SCANLINE_DRAW_STEP = 0;
+  for (uint32_t dwCrc : Hblank_Draw_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      SCANLINE_DRAW_STEP = STEP_PER_SCANLINE * 256 / 341;
 }
 
 int InfoNES_GetRegion()
@@ -855,6 +939,53 @@ void InfoNES_Main(int region)
 
 /*===================================================================*/
 /*                                                                   */
+/*          InfoNES_HSyncDraw() : Render the current scanline        */
+/*                                                                   */
+/*===================================================================*/
+static void __not_in_flash_func(InfoNES_HSyncDraw)()
+{
+  /* The game moved the PPU address mid-frame (a $2006 pair) to select the row
+     for this line. On hardware the horizontal bits of v are reloaded from t at
+     dot 257 of the preceding line, which is before the fetches for this one -
+     so the row comes from the $2006 write but the column still comes from the
+     last $2005. Rad Racer II's road relies on it: it writes a fresh row every
+     scanline with a coarse X of 0, and without the reload the top half of the
+     road is drawn 128 pixels off. The unconditional reload in InfoNES_HSync()
+     runs after the line is drawn and is what every other game needs, so this
+     only fires when a mid-frame $2006 actually happened. */
+  if (PPU_MidFrameAddrWrite)
+  {
+    PPU_MidFrameAddrWrite = 0;
+    if ((PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)) && PPU_Scanline < SCAN_UNKNOWN_START)
+      PPU_Addr = (PPU_Addr & ~0b10000011111) | (PPU_Temp & 0b10000011111);
+  }
+
+  PPU_Scr_H_Byte = PPU_Addr & 31;
+  PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
+
+  /*-------------------------------------------------------------------*/
+  /*  Render a scanline                                                */
+  /*-------------------------------------------------------------------*/
+  if (FrameCnt == 0 &&
+      PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
+  {
+    if (PPU_Scanline >= 4 && PPU_Scanline < 240 - 4)
+    {
+      InfoNES_PreDrawLine(PPU_Scanline);
+      /* NSF mode has no PPU work — InfoNES_PostDrawLine paints the
+         NSF VU-meter overlay over the line buffer, so skipping the
+         PPU pixel pipeline buys back a large slice of CPU time
+         (Akumajou1.nsf and other heavy NSFs). */
+      if (!IsNSF)
+        InfoNES_DrawLine();
+      InfoNES_PostDrawLine(PPU_Scanline);
+    }
+    // todo: 描画しないラインにもスプライトオーバーレジスタとかは反映する必要がある
+  }
+}
+
+/*===================================================================*/
+/*                                                                   */
 /*              InfoNES_Cycle() : The loop of emulation              */
 /*                                                                   */
 /*===================================================================*/
@@ -874,12 +1005,57 @@ void __not_in_flash_func(InfoNES_Cycle)()
   {
     util::WorkMeterMark(MARKER_START);
 
+    PPU_R1_Line = PPU_R1;
+
+    // This line's CPU budget: STEP_PER_SCANLINE, minus the cycle the
+    // fractional accumulator hands back when it wraps. Zero for every ROM
+    // except the few listed in Ntsc_Exact_Frame_Crcs, which need the frame to
+    // be the length real hardware makes it. See SCANLINE_FRAC_NUM in
+    // InfoNES.h.
+    int nScanlineStep = STEP_PER_SCANLINE;
+    ScanlineFrac += SCANLINE_FRAC_NUM;
+    if (ScanlineFrac >= SCANLINE_FRAC_DEN)
+    {
+      ScanlineFrac -= SCANLINE_FRAC_DEN;
+      --nScanlineStep;
+    }
+
+    bool bSpriteHit = SpriteJustHit == PPU_Scanline &&
+                      PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN;
+
+    if (SCANLINE_DRAW_STEP)
+    {
+      // Hblank_Draw_Crcs: draw the line where its visible part ends, and run
+      // the rest of the slice (horizontal blank) after it.
+      int nDone = 0;
+      int nHitStep = SPRRAM[SPR_X] * nScanlineStep / NES_DISP_WIDTH;
+      auto spriteHit = [] {
+        if ((PPU_R1 & R1_SHOW_SP) && (PPU_R1 & R1_SHOW_SCR))
+          PPU_R2 |= R2_HIT_SP;
+      };
+      if (bSpriteHit && nHitStep <= SCANLINE_DRAW_STEP)
+      {
+        K6502_Step(nHitStep);
+        spriteHit();
+        nDone = nHitStep;
+        bSpriteHit = false;
+      }
+      K6502_Step(SCANLINE_DRAW_STEP - nDone);
+      nDone = SCANLINE_DRAW_STEP;
+      InfoNES_HSyncDraw();
+      if (bSpriteHit)
+      {
+        K6502_Step(nHitStep - nDone);
+        spriteHit();
+        nDone = nHitStep;
+      }
+      K6502_Step(nScanlineStep - nDone);
+    }
     // Set a flag if a scanning line is a hit in the sprite #0
-    if (SpriteJustHit == PPU_Scanline &&
-        PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
+    else if (bSpriteHit)
     {
       // # of Steps to execute before sprite #0 hit
-      int nStep = SPRRAM[SPR_X] * STEP_PER_SCANLINE / NES_DISP_WIDTH;
+      int nStep = SPRRAM[SPR_X] * nScanlineStep / NES_DISP_WIDTH;
 
       // Execute instructions
       K6502_Step(nStep);
@@ -901,16 +1077,16 @@ void __not_in_flash_func(InfoNES_Cycle)()
       //   NMI_REQ;
 
       // Execute instructions
-      K6502_Step(STEP_PER_SCANLINE - nStep);
+      K6502_Step(nScanlineStep - nStep);
     }
     else
     {
       // Execute instructions
-      K6502_Step(STEP_PER_SCANLINE);
+      K6502_Step(nScanlineStep);
     }
 
     // Frame IRQ in H-Sync
-    FrameStep += STEP_PER_SCANLINE;
+    FrameStep += nScanlineStep;
     if (FrameStep > STEP_PER_FRAME && FrameIRQ_Enable)
     {
       FrameStep %= STEP_PER_FRAME;
@@ -958,44 +1134,10 @@ int __not_in_flash_func(InfoNES_HSync)()
   // tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
   // PPU_Scr_V_Bit = tmpv & 7;
   // PPU_Scr_V_Byte = (tmpv >> 3) & 31;
-  /* The game moved the PPU address mid-frame (a $2006 pair) to select the row
-     for this line. On hardware the horizontal bits of v are reloaded from t at
-     dot 257 of the preceding line, which is before the fetches for this one -
-     so the row comes from the $2006 write but the column still comes from the
-     last $2005. Rad Racer II's road relies on it: it writes a fresh row every
-     scanline with a coarse X of 0, and without the reload the top half of the
-     road is drawn 128 pixels off. The unconditional reload further down runs
-     after the line is drawn and is what every other game needs, so this only
-     fires when a mid-frame $2006 actually happened. */
-  if (PPU_MidFrameAddrWrite)
-  {
-    PPU_MidFrameAddrWrite = 0;
-    if ((PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)) && PPU_Scanline < SCAN_UNKNOWN_START)
-      PPU_Addr = (PPU_Addr & ~0b10000011111) | (PPU_Temp & 0b10000011111);
-  }
 
-  PPU_Scr_H_Byte = PPU_Addr & 31;
-  PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
-
-  /*-------------------------------------------------------------------*/
-  /*  Render a scanline                                                */
-  /*-------------------------------------------------------------------*/
-  if (FrameCnt == 0 &&
-      PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
-  {
-    if (PPU_Scanline >= 4 && PPU_Scanline < 240 - 4)
-    {
-      InfoNES_PreDrawLine(PPU_Scanline);
-      /* NSF mode has no PPU work — InfoNES_PostDrawLine paints the
-         NSF VU-meter overlay over the line buffer, so skipping the
-         PPU pixel pipeline buys back a large slice of CPU time
-         (Akumajou1.nsf and other heavy NSFs). */
-      if (!IsNSF)
-        InfoNES_DrawLine();
-      InfoNES_PostDrawLine(PPU_Scanline);
-    }
-    // todo: 描画しないラインにもスプライトオーバーレジスタとかは反映する必要がある
-  }
+  // Drawn in InfoNES_Cycle() instead for the ROMs in Hblank_Draw_Crcs
+  if (!SCANLINE_DRAW_STEP)
+    InfoNES_HSyncDraw();
 
   util::WorkMeterReset(); // 計測起点はここ
 
@@ -1277,6 +1419,10 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   BYTE bySprCol;
   BYTE pSprBuf[NES_DISP_WIDTH + 7];
 
+  /* $2001 as it is at the end of the line's CPU slice, plus - for the ROMs in
+     R1_Line_Crcs only - any layer that was on earlier in the slice. */
+  const BYTE byR1 = PPU_R1 | (PPU_R1_Line & PPU_R1_LineMask);
+
   /*-------------------------------------------------------------------*/
   /*  Render Background                                                */
   /*-------------------------------------------------------------------*/
@@ -1290,7 +1436,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   pPoint = WorkLine;
 
   // Clear a scanline if screen is off
-  if (!(PPU_R1 & R1_SHOW_SCR))
+  if (!(byR1 & R1_SHOW_SCR))
   {
     InfoNES_MemorySet(pPoint, 0, NES_DISP_WIDTH << 1);
   }
@@ -1337,6 +1483,14 @@ void __not_in_flash_func(InfoNES_DrawLine)()
        latch, mapper 96) pay the call at all - see MapperPPUActive. */
     const int bgPatBase = (patternTableIdBG << 12) | (yOfsModBG << 1);
 
+    /* MMC5 extended attribute mode ($5104 = 1): ExRAM supplies each background
+       tile's palette and 4K CHR bank. Tested once per scanline; the tile loops
+       below are compiled with and without it, so every other game runs a loop
+       with no per-tile mode test. The bank pointers come from a table the
+       mapper keeps up to date (Map5_Ex_Chr_Bank), so no tile divides. */
+    const bool exAttr = Map5_Gfx_Mode == 1;
+    const BYTE *exRow = exAttr ? Map5_Ex_Vram + nY * 32 : nullptr;
+
     /*-------------------------------------------------------------------*/
     /*  Rendering of the block of the left end                           */
     /*-------------------------------------------------------------------*/
@@ -1356,23 +1510,16 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPoint += 8 - PPU_Scr_H_Bit;
 
       const int ch = *pbyNameTable;
-#if PICO_RP2350
       const WORD *pal;
       const BYTE *data;
-      if (Map5_Gfx_Mode == 1) {
-        const BYTE exram = Map5_Ex_Vram[nY * 32 + nX];
+      if (exAttr) {
+        const BYTE exram = exRow[nX];
         pal = &PalTable[((exram >> 6) & 3) << 2];
-        const int chrBank4K = ((int)Map5_Chr_Upper << 6) | (exram & 0x3F);
-        const int vromPage = (chrBank4K * 4 + (ch >> 6)) % (NesHeader.byVRomSize << 3);
-        data = VROMPAGE(vromPage) + ((ch & 63) << 4) + yOfsModBG;
+        data = Map5_Ex_Chr_Bank[exram & 0x3F] + (ch << 4) + yOfsModBG;
       } else {
         pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
         data = PPUBANK[(ch >> 6) + bankOfsBG] + ((ch & 63) << 4) + yOfsModBG;
       }
-#else
-      const auto pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
-      const auto data = PPUBANK[(ch >> 6) + bankOfsBG] + ((ch & 63) << 4) + yOfsModBG;
-#endif
       const auto pl0 = data[0];
       const auto pl1 = data[8];
       const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
@@ -1412,28 +1559,21 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*  Rendering of the left table                                      */
     /*-------------------------------------------------------------------*/
 
-    auto putBG = [&](int nX) __attribute__((always_inline))
+    auto putBG = [&](int nX, auto exAttrT) __attribute__((always_inline))
     {
       const int ch = *pbyNameTable;
-#if PICO_RP2350
       const WORD *pal;
       const BYTE *data;
-      if (Map5_Gfx_Mode == 1) {
-        const BYTE exram = Map5_Ex_Vram[nY * 32 + nX];
+      if constexpr (decltype(exAttrT)::value) {
+        const BYTE exram = exRow[nX];
         pal = &PalTable[((exram >> 6) & 3) << 2];
-        const int chrBank4K = ((int)Map5_Chr_Upper << 6) | (exram & 0x3F);
-        const int vromPage = (chrBank4K * 4 + (ch >> 6)) % (NesHeader.byVRomSize << 3);
-        data = VROMPAGE(vromPage) + ((ch & 63) << 4) + yOfsModBG;
+        data = Map5_Ex_Chr_Bank[exram & 0x3F] + (ch << 4) + yOfsModBG;
       } else {
         pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
-        data = PPUBANK[(ch >> 6) + bankOfsBG] + ((ch & 63) << 4) + yOfsModBG;
+        const int bank = (ch >> 6) + bankOfsBG;
+        const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
+        data = PPUBANK[bank] + addrOfs;
       }
-#else
-      const auto pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
-      const int bank = (ch >> 6) + bankOfsBG;
-      const int addrOfs = ((ch & 63) << 4) + yOfsModBG;
-      const auto data = PPUBANK[bank] + addrOfs;
-#endif
       const auto palAddr = reinterpret_cast<uintptr_t>(pal);
       const auto pl0 = data[0];
       const auto pl1 = data[8];
@@ -1458,31 +1598,29 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       return ch;
     };
 
-    for (; nX < 32; ++nX)
+    // Draw the tiles from nX up to nEnd, testing exAttr once for the whole run.
+    auto drawTiles = [&](int nEnd) __attribute__((always_inline))
     {
-#if 0
-      pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-      pPalTbl = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
+      auto loop = [&](auto exAttrT) __attribute__((always_inline))
+      {
+        for (; nX < nEnd; ++nX)
+        {
+          const int chBG = putBG(nX, exAttrT);
 
-      pPoint[0] = pPalTbl[pbyChrData[0]];
-      pPoint[1] = pPalTbl[pbyChrData[1]];
-      pPoint[2] = pPalTbl[pbyChrData[2]];
-      pPoint[3] = pPalTbl[pbyChrData[3]];
-      pPoint[4] = pPalTbl[pbyChrData[4]];
-      pPoint[5] = pPalTbl[pbyChrData[5]];
-      pPoint[6] = pPalTbl[pbyChrData[6]];
-      pPoint[7] = pPalTbl[pbyChrData[7]];
-      pPoint += 8;
-#else
-      const int chBG = putBG(nX);
-#endif
+          // Callback at PPU read/write
+          if (MapperPPUActive)
+            MapperPPU(bgPatBase | (chBG << 4));
 
-      // Callback at PPU read/write
-      if (MapperPPUActive)
-        MapperPPU(bgPatBase | (chBG << 4));
+          ++pbyNameTable;
+        }
+      };
+      if (exAttr)
+        loop(std::true_type{});
+      else
+        loop(std::false_type{});
+    };
 
-      ++pbyNameTable;
-    }
+    drawTiles(32);
 
     // Holizontal Mirror
     nNameTable ^= NAME_TABLE_H_MASK;
@@ -1494,31 +1632,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*  Rendering of the right table                                     */
     /*-------------------------------------------------------------------*/
 
-    for (nX = 0; nX < PPU_Scr_H_Byte; ++nX)
-    {
-#if 0
-      pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
-      pPalTbl = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
-
-      pPoint[0] = pPalTbl[pbyChrData[0]];
-      pPoint[1] = pPalTbl[pbyChrData[1]];
-      pPoint[2] = pPalTbl[pbyChrData[2]];
-      pPoint[3] = pPalTbl[pbyChrData[3]];
-      pPoint[4] = pPalTbl[pbyChrData[4]];
-      pPoint[5] = pPalTbl[pbyChrData[5]];
-      pPoint[6] = pPalTbl[pbyChrData[6]];
-      pPoint[7] = pPalTbl[pbyChrData[7]];
-      pPoint += 8;
-#else
-      const int chBG = putBG(nX);
-#endif
-
-      // Callback at PPU read/write
-      if (MapperPPUActive)
-        MapperPPU(bgPatBase | (chBG << 4));
-
-      ++pbyNameTable;
-    }
+    nX = 0;
+    drawTiles(PPU_Scr_H_Byte);
 
     /*-------------------------------------------------------------------*/
     /*  Rendering of the block of the right end                          */
@@ -1534,23 +1649,16 @@ void __not_in_flash_func(InfoNES_DrawLine)()
 #else
     {
       const int ch = *pbyNameTable;
-#if PICO_RP2350
       const WORD *pal;
       const BYTE *data;
-      if (Map5_Gfx_Mode == 1) {
-        const BYTE exram = Map5_Ex_Vram[nY * 32 + nX];
+      if (exAttr) {
+        const BYTE exram = exRow[nX];
         pal = &PalTable[((exram >> 6) & 3) << 2];
-        const int chrBank4K = ((int)Map5_Chr_Upper << 6) | (exram & 0x3F);
-        const int vromPage = (chrBank4K * 4 + (ch >> 6)) % (NesHeader.byVRomSize << 3);
-        data = VROMPAGE(vromPage) + ((ch & 63) << 4) + yOfsModBG;
+        data = Map5_Ex_Chr_Bank[exram & 0x3F] + (ch << 4) + yOfsModBG;
       } else {
         pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
         data = PPUBANK[(ch >> 6) + bankOfsBG] + ((ch & 63) << 4) + yOfsModBG;
       }
-#else
-      const auto pal = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];
-      const auto data = PPUBANK[(ch >> 6) + bankOfsBG] + ((ch & 63) << 4) + yOfsModBG;
-#endif
       const auto pl0 = data[0];
       const auto pl1 = data[8];
       const auto pat0 = (pl0 & 0x55) | ((pl1 << 1) & 0xaa);
@@ -1589,7 +1697,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*-------------------------------------------------------------------*/
     /*  Backgroud Clipping                                               */
     /*-------------------------------------------------------------------*/
-    if (!(PPU_R1 & R1_CLIP_BG))
+    if (!(byR1 & R1_CLIP_BG))
     {
       WORD *pPointTop;
 
@@ -1621,7 +1729,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   /* MMC5 VROM switch */
   MapperRenderScreen(0);
 
-  if (PPU_R1 & R1_SHOW_SP)
+  if (byR1 & R1_SHOW_SP)
   {
     // Reset Scanline Sprite Count
     PPU_R2 &= ~R2_MAX_SP;
@@ -1863,7 +1971,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*-------------------------------------------------------------------*/
     /*  Sprite Clipping                                                  */
     /*-------------------------------------------------------------------*/
-    if (!(PPU_R1 & R1_CLIP_SP))
+    if (!(byR1 & R1_CLIP_SP))
     {
       WORD *pPointTop;
 

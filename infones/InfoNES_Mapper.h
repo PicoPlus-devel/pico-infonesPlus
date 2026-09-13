@@ -50,14 +50,14 @@ extern BYTE *DRAM;
 /*-------------------------------------------------------------------*/
 
 /* The address of 8Kbytes unit of the Map5 WRAM */
-#if PICO_RP2350
 extern BYTE *Map5_Wram;
+extern BYTE Map5_Wram_Page[ 8 ];
 extern BYTE *Map5_Ex_Vram;
 extern BYTE *Map5_Ex_Nam;
 extern BYTE Map5_Gfx_Mode;
 extern BYTE Map5_Chr_Upper;
-#define Map5_ROMPAGE(a) &Map5_Wram[((a)&0x07) * 0x2000]
-#endif
+extern BYTE *Map5_Ex_Chr_Bank[ 64 ];
+#define Map5_ROMPAGE(a) ( &Map5_Wram[ Map5_Wram_Page[ (a) & 0x07 ] * 0x2000 ] )
 
 /* Mapper 85 (VRC7) 256KB CHR RAM, allocated on first init via f_malloc. */
 extern BYTE *Map85_Chr_Ram;
@@ -591,6 +591,11 @@ void Map193_Sram(WORD wAddr, BYTE byData);
 
 void Map194_Init();
 void Map194_Write(WORD wAddr, BYTE byData);
+
+void Map196_Init();
+void Map196_Write(WORD wAddr, BYTE byData);
+void Map196_Sram(WORD wAddr, BYTE byData);
+void Map196_Set_CPU_Banks();
 
 void Map200_Init();
 void Map200_Write(WORD wAddr, BYTE byData);

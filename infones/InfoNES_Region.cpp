@@ -19,6 +19,9 @@
 // Provides `mesenNesDB[]` and the MESEN_* enum used in the lookup below.
 #include "MesenNesDB.h"
 
+// Set by InfoNES_DetectRegion(); see InfoNES_Region.h.
+uint32_t InfoNES_RomCrc = 0;
+
 // 16-byte iNES / NES 2.0 file header, laid out to match the on-disk format
 // so it can be cast directly over the start of a ROM image.
 typedef struct {
@@ -102,6 +105,7 @@ int InfoNES_DetectRegion(uintptr_t addr, uint32_t crc, const char* romName)
     auto *p = reinterpret_cast<const uint8_t *>(addr);
     NESHeader *h = (NESHeader *)p;
     printf("Detecting region for ROM CRC %08X\n", crc);
+    InfoNES_RomCrc = crc;
     // Guard against garbage input — without this, random bytes could hit
     // the NES 2.0 path below and yield a bogus region from flags12.
     if (h->magic[0] != 'N' || h->magic[1] != 'E' || h->magic[2] != 'S' || h->magic[3] != 0x1A) {

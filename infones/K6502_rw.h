@@ -307,6 +307,7 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
 
     case 1: /* 0x2001 */
       PPU_R1 = byData;
+      PPU_R1_Line |= byData;
       break;
 
     case 2: /* 0x2002 */

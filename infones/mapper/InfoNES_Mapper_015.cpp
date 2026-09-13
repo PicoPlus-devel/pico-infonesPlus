@@ -52,61 +52,69 @@ void Map15_Init()
 /*-------------------------------------------------------------------*/
 /*  Mapper 15 Write Function                                         */
 /*-------------------------------------------------------------------*/
+
+/* 8Kbytes page index, always wrapped into the image */
+#define MAP15_PAGE( p ) ROMPAGE( (int)( p ) % ( NesHeader.byRomSize << 1 ) )
+
 void Map15_Write( WORD wAddr, BYTE byData )
 {
-  BYTE byBank;
+  /*
+   *  The K-1029 decodes address mask $8000, so only A1/A0 select the banking
+   *  mode and the register is mirrored over the whole $8000-$FFFF range.
+   *
+   *    D~[pMPP PPPP]   P : PRG A19..A14 (6 bits)
+   *                    M : mirroring, 0 vertical / 1 horizontal
+   *                    p : PRG A13, banking mode 2 only
+   *
+   *  Note the real PCB write-protects CHR RAM in modes 0 and 3 and carries no
+   *  PRG RAM at $6000-$7FFF.  That is deliberately not emulated: every mapper
+   *  15 ROM other than the two 100-in-1/168-in-1 multicarts is a mapper hack
+   *  (usually of mapper 164 or 227) that needs both relaxed to run at all.
+   */
+  BYTE byBank = byData & 0x3f;
 
-  switch ( wAddr )
+  /* Mirroring is latched on every write, in every mode */
+  InfoNES_Mirroring( byData & 0x40 ? 0 : 1 );
+
+  switch ( wAddr & 0x0003 )
   {
-    case 0x8000:
-      /* Name Table Mirroring */
-      InfoNES_Mirroring( byData & 0x20 ? 0 : 1);
-      
-      /* Set ROM Banks */
-      byBank = byData & 0x1f;
-      byBank %= ( NesHeader.byRomSize << 1 );
-      byBank <<= 1;
+    case 0:
+      /* NROM-256 : 32Kbytes, PRG A14 is supplied by CPU A14 */
+      byBank &= 0x3e;
 
-      ROMBANK0 = ROMPAGE( byBank );
-      ROMBANK1 = ROMPAGE( byBank + 1 );
-      ROMBANK2 = ROMPAGE( byBank + 2 );
-      ROMBANK3 = ROMPAGE( byBank + 3 );
+      ROMBANK0 = MAP15_PAGE( byBank * 2 );
+      ROMBANK1 = MAP15_PAGE( byBank * 2 + 1 );
+      ROMBANK2 = MAP15_PAGE( byBank * 2 + 2 );
+      ROMBANK3 = MAP15_PAGE( byBank * 2 + 3 );
       break;
 
-    case 0x8001:
-      /* Set ROM Banks */
-      byData &= 0x3f;
-      byData %= ( NesHeader.byRomSize << 1 );
-      byData <<= 1;
+    case 1:
+      /* UNROM : PRG A14..A16 are forced to 111 while CPU A14 is 1 */
+      ROMBANK0 = MAP15_PAGE( byBank * 2 );
+      ROMBANK1 = MAP15_PAGE( byBank * 2 + 1 );
 
-      ROMBANK2 = ROMPAGE( byData );
-      ROMBANK3 = ROMPAGE( byData + 1 );
+      byBank = ( byBank & 0x38 ) | 0x07;
+
+      ROMBANK2 = MAP15_PAGE( byBank * 2 );
+      ROMBANK3 = MAP15_PAGE( byBank * 2 + 1 );
       break;
 
-    case 0x8002:
-      /* Set ROM Banks */
-      byBank = byData & 0x3f; 
-      byBank %= ( NesHeader.byRomSize << 1 );
-      byBank <<= 1;
-      byBank += ( byData & 0x80 ? 1 : 0 );
+    case 2:
+      /* NROM-64 : one 8Kbytes bank mirrored four times, PRG A13 is p */
+      byBank = byBank * 2 + ( byData & 0x80 ? 1 : 0 );
 
-      ROMBANK0 = ROMPAGE( byBank );
-      ROMBANK1 = ROMPAGE( byBank );
-      ROMBANK2 = ROMPAGE( byBank );
-      ROMBANK3 = ROMPAGE( byBank );
+      ROMBANK0 = MAP15_PAGE( byBank );
+      ROMBANK1 = MAP15_PAGE( byBank );
+      ROMBANK2 = MAP15_PAGE( byBank );
+      ROMBANK3 = MAP15_PAGE( byBank );
       break;
 
-    case 0x8003:
-      /* Name Table Mirroring */
-      InfoNES_Mirroring( byData & 0x20 ? 0 : 1);
-      
-      /* Set ROM Banks */
-      byData &= 0x1f;
-      byData %= ( NesHeader.byRomSize << 1 );
-      byData <<= 1;
-
-      ROMBANK2 = ROMPAGE( byData );
-      ROMBANK3 = ROMPAGE( byData + 1 );
+    case 3:
+      /* NROM-128 : one 16Kbytes bank mirrored twice */
+      ROMBANK0 = MAP15_PAGE( byBank * 2 );
+      ROMBANK1 = MAP15_PAGE( byBank * 2 + 1 );
+      ROMBANK2 = MAP15_PAGE( byBank * 2 );
+      ROMBANK3 = MAP15_PAGE( byBank * 2 + 1 );
       break;
   }
 }
