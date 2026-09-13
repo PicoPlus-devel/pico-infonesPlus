@@ -86,6 +86,9 @@ extern BYTE *SPRRAM;
 /* PPU Register */
 extern BYTE PPU_R0;
 extern BYTE PPU_R1;
+/* Every $2001 value seen during the current scanline's CPU slice, ORed
+   together. See R1_Line_Crcs in InfoNES.cpp. */
+extern BYTE PPU_R1_Line;
 extern BYTE PPU_R2;
 extern BYTE PPU_R3;
 extern BYTE PPU_R7;

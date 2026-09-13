@@ -143,6 +143,7 @@ BYTE *VROM;
 /* PPU Register */
 BYTE PPU_R0;
 BYTE PPU_R1;
+BYTE PPU_R1_Line;
 BYTE PPU_R2;
 BYTE PPU_R3;
 BYTE PPU_R7;
@@ -254,7 +255,46 @@ static WORD ScanlineFrac = 0;
 static const uint32_t Ntsc_Exact_Frame_Crcs[] =
 {
   0xF08E362C,   /* Project Blue (USA) (Aftermarket) (Unl), mapper 111 */
+  0x8BCA5146,   /* Indiana Jones and the Last Crusade (USA) (Taito) - see Hblank_Draw_Crcs */
 };
+
+/* ROMs that turn rendering off and back on in the middle of a line. The line
+   is drawn from $2001 as it is at the end of its CPU slice, so it came out
+   black. For these a layer that was on at any point in the slice is drawn -
+   see InfoNES_DrawLine(). Doing it for every game was tried: checked against
+   Mesen it also fixes some letterbox edges, but just as often adds a line under
+   a status bar (Burai Fighter, Isolated Warrior, Dizzy), so it is opt-in. */
+static const uint32_t R1_Line_Crcs[] =
+{
+  0x10CB935F,   /* Lion King, The (Unl) */
+  0x3A6577CD,   /* Jurassic Park - The Lost World (Unl) */
+};
+static BYTE PPU_R1_LineMask = 0;
+
+/* ROMs whose lines are drawn where the visible part of the scanline ends
+   (dot 256) instead of after the whole CPU slice, so PPU writes made in
+   horizontal blank land on the next line, as on hardware. With it, the title
+   screens below match Mesen row for row.
+
+   Indiana Jones and the Last Crusade (Taito) paints its sky gradient with
+   rendering off, PPU address to $3F00, a new colour, the scroll address
+   restored, rendering on - split over the end of one line and the start of the
+   next. Drawn at the end of the slice those lines came out black or with the
+   logo missing, and the $2006 restore moved the lower half of the logo a line
+   up or down from frame to frame. It also needs the exact frame length
+   (Ntsc_Exact_Frame_Crcs) so the writes stay at the same place in the line.
+
+   Battletoads & Double Dragon waits for a sprite 0 hit at X=209 on line 87 and
+   then switches the background pattern table with $2000, which on hardware is
+   in horizontal blank. Here the write fell either side of the slice boundary,
+   so line 87 flickered between the two tile sets. */
+static const uint32_t Hblank_Draw_Crcs[] =
+{
+  0x8BCA5146,   /* Indiana Jones and the Last Crusade (USA) (Taito) */
+  0xCEB65B06,   /* Battletoads-Double Dragon (USA) */
+  0x23D7D48F,   /* Battletoads-Double Dragon (Europe) */
+};
+static WORD SCANLINE_DRAW_STEP = 0;
 
 /* Table for Mirroring */
 BYTE PPU_MirrorTable[][4] =
@@ -805,6 +845,10 @@ void InfoNES_SetRegion(int region)
   SCANLINE_FRAC_NUM = 0;
   SCANLINE_FRAC_DEN = 1;
   ScanlineFrac = 0;
+  PPU_R1_LineMask = 0;
+  for (uint32_t dwCrc : R1_Line_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      PPU_R1_LineMask = R1_SHOW_SCR | R1_SHOW_SP;
   switch (region)
   {
   case INFONES_REGION_PAL:
@@ -841,6 +885,11 @@ void InfoNES_SetRegion(int region)
       }
     break;
   }
+
+  SCANLINE_DRAW_STEP = 0;
+  for (uint32_t dwCrc : Hblank_Draw_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      SCANLINE_DRAW_STEP = STEP_PER_SCANLINE * 256 / 341;
 }
 
 int InfoNES_GetRegion()
@@ -890,6 +939,53 @@ void InfoNES_Main(int region)
 
 /*===================================================================*/
 /*                                                                   */
+/*          InfoNES_HSyncDraw() : Render the current scanline        */
+/*                                                                   */
+/*===================================================================*/
+static void __not_in_flash_func(InfoNES_HSyncDraw)()
+{
+  /* The game moved the PPU address mid-frame (a $2006 pair) to select the row
+     for this line. On hardware the horizontal bits of v are reloaded from t at
+     dot 257 of the preceding line, which is before the fetches for this one -
+     so the row comes from the $2006 write but the column still comes from the
+     last $2005. Rad Racer II's road relies on it: it writes a fresh row every
+     scanline with a coarse X of 0, and without the reload the top half of the
+     road is drawn 128 pixels off. The unconditional reload in InfoNES_HSync()
+     runs after the line is drawn and is what every other game needs, so this
+     only fires when a mid-frame $2006 actually happened. */
+  if (PPU_MidFrameAddrWrite)
+  {
+    PPU_MidFrameAddrWrite = 0;
+    if ((PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)) && PPU_Scanline < SCAN_UNKNOWN_START)
+      PPU_Addr = (PPU_Addr & ~0b10000011111) | (PPU_Temp & 0b10000011111);
+  }
+
+  PPU_Scr_H_Byte = PPU_Addr & 31;
+  PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
+
+  /*-------------------------------------------------------------------*/
+  /*  Render a scanline                                                */
+  /*-------------------------------------------------------------------*/
+  if (FrameCnt == 0 &&
+      PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
+  {
+    if (PPU_Scanline >= 4 && PPU_Scanline < 240 - 4)
+    {
+      InfoNES_PreDrawLine(PPU_Scanline);
+      /* NSF mode has no PPU work — InfoNES_PostDrawLine paints the
+         NSF VU-meter overlay over the line buffer, so skipping the
+         PPU pixel pipeline buys back a large slice of CPU time
+         (Akumajou1.nsf and other heavy NSFs). */
+      if (!IsNSF)
+        InfoNES_DrawLine();
+      InfoNES_PostDrawLine(PPU_Scanline);
+    }
+    // todo: 描画しないラインにもスプライトオーバーレジスタとかは反映する必要がある
+  }
+}
+
+/*===================================================================*/
+/*                                                                   */
 /*              InfoNES_Cycle() : The loop of emulation              */
 /*                                                                   */
 /*===================================================================*/
@@ -909,6 +1005,8 @@ void __not_in_flash_func(InfoNES_Cycle)()
   {
     util::WorkMeterMark(MARKER_START);
 
+    PPU_R1_Line = PPU_R1;
+
     // This line's CPU budget: STEP_PER_SCANLINE, minus the cycle the
     // fractional accumulator hands back when it wraps. Zero for every ROM
     // except the few listed in Ntsc_Exact_Frame_Crcs, which need the frame to
@@ -922,9 +1020,39 @@ void __not_in_flash_func(InfoNES_Cycle)()
       --nScanlineStep;
     }
 
+    bool bSpriteHit = SpriteJustHit == PPU_Scanline &&
+                      PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN;
+
+    if (SCANLINE_DRAW_STEP)
+    {
+      // Hblank_Draw_Crcs: draw the line where its visible part ends, and run
+      // the rest of the slice (horizontal blank) after it.
+      int nDone = 0;
+      int nHitStep = SPRRAM[SPR_X] * nScanlineStep / NES_DISP_WIDTH;
+      auto spriteHit = [] {
+        if ((PPU_R1 & R1_SHOW_SP) && (PPU_R1 & R1_SHOW_SCR))
+          PPU_R2 |= R2_HIT_SP;
+      };
+      if (bSpriteHit && nHitStep <= SCANLINE_DRAW_STEP)
+      {
+        K6502_Step(nHitStep);
+        spriteHit();
+        nDone = nHitStep;
+        bSpriteHit = false;
+      }
+      K6502_Step(SCANLINE_DRAW_STEP - nDone);
+      nDone = SCANLINE_DRAW_STEP;
+      InfoNES_HSyncDraw();
+      if (bSpriteHit)
+      {
+        K6502_Step(nHitStep - nDone);
+        spriteHit();
+        nDone = nHitStep;
+      }
+      K6502_Step(nScanlineStep - nDone);
+    }
     // Set a flag if a scanning line is a hit in the sprite #0
-    if (SpriteJustHit == PPU_Scanline &&
-        PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
+    else if (bSpriteHit)
     {
       // # of Steps to execute before sprite #0 hit
       int nStep = SPRRAM[SPR_X] * nScanlineStep / NES_DISP_WIDTH;
@@ -1006,44 +1134,10 @@ int __not_in_flash_func(InfoNES_HSync)()
   // tmpv -= PPU_Scanline >= 240 ? 0 : PPU_Scanline;
   // PPU_Scr_V_Bit = tmpv & 7;
   // PPU_Scr_V_Byte = (tmpv >> 3) & 31;
-  /* The game moved the PPU address mid-frame (a $2006 pair) to select the row
-     for this line. On hardware the horizontal bits of v are reloaded from t at
-     dot 257 of the preceding line, which is before the fetches for this one -
-     so the row comes from the $2006 write but the column still comes from the
-     last $2005. Rad Racer II's road relies on it: it writes a fresh row every
-     scanline with a coarse X of 0, and without the reload the top half of the
-     road is drawn 128 pixels off. The unconditional reload further down runs
-     after the line is drawn and is what every other game needs, so this only
-     fires when a mid-frame $2006 actually happened. */
-  if (PPU_MidFrameAddrWrite)
-  {
-    PPU_MidFrameAddrWrite = 0;
-    if ((PPU_R1 & (R1_SHOW_SP | R1_SHOW_SCR)) && PPU_Scanline < SCAN_UNKNOWN_START)
-      PPU_Addr = (PPU_Addr & ~0b10000011111) | (PPU_Temp & 0b10000011111);
-  }
 
-  PPU_Scr_H_Byte = PPU_Addr & 31;
-  PPU_NameTableBank = NAME_TABLE0 + ((PPU_Addr >> 10) & 3);
-
-  /*-------------------------------------------------------------------*/
-  /*  Render a scanline                                                */
-  /*-------------------------------------------------------------------*/
-  if (FrameCnt == 0 &&
-      PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN)
-  {
-    if (PPU_Scanline >= 4 && PPU_Scanline < 240 - 4)
-    {
-      InfoNES_PreDrawLine(PPU_Scanline);
-      /* NSF mode has no PPU work — InfoNES_PostDrawLine paints the
-         NSF VU-meter overlay over the line buffer, so skipping the
-         PPU pixel pipeline buys back a large slice of CPU time
-         (Akumajou1.nsf and other heavy NSFs). */
-      if (!IsNSF)
-        InfoNES_DrawLine();
-      InfoNES_PostDrawLine(PPU_Scanline);
-    }
-    // todo: 描画しないラインにもスプライトオーバーレジスタとかは反映する必要がある
-  }
+  // Drawn in InfoNES_Cycle() instead for the ROMs in Hblank_Draw_Crcs
+  if (!SCANLINE_DRAW_STEP)
+    InfoNES_HSyncDraw();
 
   util::WorkMeterReset(); // 計測起点はここ
 
@@ -1325,6 +1419,10 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   BYTE bySprCol;
   BYTE pSprBuf[NES_DISP_WIDTH + 7];
 
+  /* $2001 as it is at the end of the line's CPU slice, plus - for the ROMs in
+     R1_Line_Crcs only - any layer that was on earlier in the slice. */
+  const BYTE byR1 = PPU_R1 | (PPU_R1_Line & PPU_R1_LineMask);
+
   /*-------------------------------------------------------------------*/
   /*  Render Background                                                */
   /*-------------------------------------------------------------------*/
@@ -1338,7 +1436,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   pPoint = WorkLine;
 
   // Clear a scanline if screen is off
-  if (!(PPU_R1 & R1_SHOW_SCR))
+  if (!(byR1 & R1_SHOW_SCR))
   {
     InfoNES_MemorySet(pPoint, 0, NES_DISP_WIDTH << 1);
   }
@@ -1599,7 +1697,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*-------------------------------------------------------------------*/
     /*  Backgroud Clipping                                               */
     /*-------------------------------------------------------------------*/
-    if (!(PPU_R1 & R1_CLIP_BG))
+    if (!(byR1 & R1_CLIP_BG))
     {
       WORD *pPointTop;
 
@@ -1631,7 +1729,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   /* MMC5 VROM switch */
   MapperRenderScreen(0);
 
-  if (PPU_R1 & R1_SHOW_SP)
+  if (byR1 & R1_SHOW_SP)
   {
     // Reset Scanline Sprite Count
     PPU_R2 &= ~R2_MAX_SP;
@@ -1873,7 +1971,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*-------------------------------------------------------------------*/
     /*  Sprite Clipping                                                  */
     /*-------------------------------------------------------------------*/
-    if (!(PPU_R1 & R1_CLIP_SP))
+    if (!(byR1 & R1_CLIP_SP))
     {
       WORD *pPointTop;
 
