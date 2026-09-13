@@ -36,6 +36,9 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 | Battery-backed MMC5 games such as *Romance of the Three Kingdoms II*, *Nobunaga's Ambition II* and *Just Breed* | 5 | Saved games were not kept, and save states did not restore correctly |
 | *Project Blue* | 111 | Blank screen at startup |
 | *Bio Hazard*, *Yuefei*, *Bao Xiao San Guo* | 15 | Did not start |
+| *Indiana Jones and the Last Crusade* (Taito) | 1 | Flickering black bars and a shaking logo on the title screen |
+| *Battletoads & Double Dragon* | 7 | Flickering line through the title logo |
+| *The Lion King* (unlicensed), *Jurassic Park - The Lost World* (unlicensed) | 4 | Black line through the picture |
 
 - On boards using the DVI output, two shades of grey were shown as black, so dimmed text was invisible. In *Bio Hazard* only the highlighted menu entry could be read. Boards using HDMI were not affected.
 
