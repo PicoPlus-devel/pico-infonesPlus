@@ -1276,7 +1276,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   int nSprData;
   BYTE bySprCol;
   BYTE pSprBuf[NES_DISP_WIDTH + 7];
-  BYTE *SPRRAM2[8];
+  BYTE *SPRRAM2[SPRRAM2_SPR_LIMIT];
 
   /*-------------------------------------------------------------------*/
   /*  Render Background                                                */
@@ -1645,14 +1645,15 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       /*  A sprite in scanning line                                        */
       /*-------------------------------------------------------------------*/
 
-      // If number of sprites <= 8, copy SPRRAM sprite address to SPRRAM2
-      if (nIdx < 8)
-        SPRRAM2[nIdx++] = pSPRRAM;
-      else
+      // If number of sprites <= SPRRAM2_SPR_LIMIT, copy SPRRAM sprite address to SPRRAM2
+      SPRRAM2[nIdx++] = pSPRRAM;
+
+      if (nIdx == SPRRAM2_SPR_LIMIT)  // SPRRAM2 buffer full
       {
         PPU_R2 |= R2_MAX_SP; // Set a flag of maximum sprites on scanline
         break;
       }
+
     }
 
     while (nIdx--)
