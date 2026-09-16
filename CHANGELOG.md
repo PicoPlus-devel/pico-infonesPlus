@@ -41,6 +41,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 | *The Lion King* (unlicensed), *Jurassic Park - The Lost World* (unlicensed) | 4 | Black line through the picture |
 
 - On boards using the DVI output, two shades of grey were shown as black, so dimmed text was invisible. In *Bio Hazard* only the highlighted menu entry could be read. Boards using HDMI were not affected.
+- A maximum of 8 sprites per line is now shown, as on a real NES. In *Felix the Cat* Felix now disappears into the magic bag before a bonus level instead of staying visible on top of it. Busy scenes in some games may flicker more, as they do on the console ([#240](https://github.com/fhoedemakers/pico-infonesPlus/pull/240)). Thanks to [magistr6x9](https://github.com/magistr6x9).
 
 # v0.49
 
