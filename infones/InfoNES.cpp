@@ -1418,6 +1418,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   int nSprData;
   BYTE bySprCol;
   BYTE pSprBuf[NES_DISP_WIDTH + 7];
+  BYTE *SPRRAM2[SPRRAM2_SPR_LIMIT];
 
   /* $2001 as it is at the end of the line's CPU slice, plus - for the ROMs in
      R1_Line_Crcs only - any layer that was on earlier in the slice. */
@@ -1741,8 +1742,8 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     const int bankOfsSP88 = patternTableIdSP88 << 2;
 
     // Render a sprite to the sprite buffer
-    nSprCnt = 0;
-    for (pSPRRAM = SPRRAM + (63 << 2); pSPRRAM >= SPRRAM; pSPRRAM -= 4)
+    nIdx = 0;
+    for (pSPRRAM = SPRRAM; pSPRRAM <= (SPRRAM + (63 << 2)); pSPRRAM += 4)
     {
       nY = pSPRRAM[SPR_Y] + 1;
       if (nY > PPU_Scanline || nY + PPU_SP_Height <= PPU_Scanline)
@@ -1752,8 +1753,21 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       /*  A sprite in scanning line                                        */
       /*-------------------------------------------------------------------*/
 
-      // Holizontal Sprite Count +1
-      ++nSprCnt;
+      // If number of sprites <= SPRRAM2_SPR_LIMIT, copy SPRRAM sprite address to SPRRAM2
+      SPRRAM2[nIdx++] = pSPRRAM;
+
+      if (nIdx == SPRRAM2_SPR_LIMIT)  // SPRRAM2 buffer full
+      {
+        PPU_R2 |= R2_MAX_SP; // Set a flag of maximum sprites on scanline
+        break;
+      }
+
+    }
+
+    while (nIdx--)
+    {
+      pSPRRAM = SPRRAM2[nIdx];
+      nY = pSPRRAM[SPR_Y] + 1;
 
       nAttr = pSPRRAM[SPR_ATTR];
       nYBit = PPU_Scanline - nY;
@@ -1979,9 +1993,6 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       pPointTop = WorkLine;
       InfoNES_MemorySet(pPointTop, 0, 8 << 1);
     }
-
-    if (nSprCnt >= 8)
-      PPU_R2 |= R2_MAX_SP; // Set a flag of maximum sprites on scanline
 
     util::WorkMeterMark(MARKER_SPRITE);
   }

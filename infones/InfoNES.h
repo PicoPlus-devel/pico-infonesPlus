@@ -83,6 +83,8 @@ extern BYTE *SPRRAM;
 #define SPR_ATTR_H_FLIP 0x40
 #define SPR_ATTR_PRI 0x20
 
+#define SPRRAM2_SPR_LIMIT 8  // maximum number of sprites per scanline
+
 /* PPU Register */
 extern BYTE PPU_R0;
 extern BYTE PPU_R1;
