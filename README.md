@@ -1352,8 +1352,8 @@ Some displays need 5V connected to the HDMI breakout in order to work:
 
 # Known Issues and limitations
 
-- Not all games will run, as some mappers are either not fully implemented or exceed memory limitations. If a game uses an unsupported mapper, the system will display a message such as: "Mapper n is unsupported." (where n is the mapper number). For example, attempting to start Castlevania III (US) on the RP2040 will result in the message: "Mapper 5 is unsupported." On the RP2350, however, this game runs without issues.
-- MMC5 and VRC7 expansion audio require an RP2350 board. VRC6, FDS and Sunsoft 5B expansion audio also work on the RP2040.
+- Not all games will run, as some mappers are either not fully implemented or exceed memory limitations. If a game uses an unsupported mapper, the system will display a message such as: "Mapper n is unsupported." (where n is the mapper number). For example, attempting to start Lagrange Point (JP) on the RP2040 will result in the message: "Mapper 85 is unsupported." On the RP2350, however, this game runs without issues.
+- VRC7 expansion audio requires an RP2350 board. MMC5, VRC6, FDS and Sunsoft 5B expansion audio also work on the RP2040.
 - The VRC7 (Yamaha OPLL) FM audio used by *Lagrange Point (JP)* only works on HSTX boards with PSRAM and requires the **Overclock** setting to be enabled. The audio may still show occasional glitches.
 - Save states are not supported for FDS games.
 

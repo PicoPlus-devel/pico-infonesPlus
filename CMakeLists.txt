@@ -44,7 +44,7 @@ message("* Current build type is : ${CMAKE_BUILD_TYPE}")
 # Hardware / board selection (project-specific)
 # ---------------------------------------------------------------------------
 if(NOT HW_CONFIG)
-    set(HW_CONFIG 8 CACHE STRING "Select the hardware configuration for your board")
+    set(HW_CONFIG 1 CACHE STRING "Select the hardware configuration for your board")
 endif()
 
 if(NOT USE_HSTX)
@@ -54,7 +54,7 @@ endif()
 include("pico_shared/BoardConfigs.cmake")
 
 if(NOT PICO_BOARD)
-    set(PICO_BOARD pico2 CACHE STRING "Board type")
+    set(PICO_BOARD pico CACHE STRING "Board type")
     message("PICO_BOARD not set, using default: ${PICO_BOARD}")
 endif()
 # ---------------------------------------------------------------------------

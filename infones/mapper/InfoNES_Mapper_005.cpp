@@ -5,7 +5,19 @@
 /*===================================================================*/
 
 
+/* 32KB is the most PRG RAM any licensed MMC5 board carries (EWROM). */
+#define MAP5_WRAM_SIZE 0x8000
+
+/* PRG+CHR CRC32s of the MMC5 games on two-chip (2 x 8KB) boards such as
+   ETROM, from the Mesen game database. */
+static const uint32_t Map5_Two_Chip_Crcs[] = {
+  0x15FE6D0F, 0x1CED086F, 0x39F2CE4B, 0x6396B988, 0x8CE478DB, 0x9C18762B,
+  0xACA15643, 0xE5584D9F, 0xEEE9A682, 0xF9B4240F, 0xFDC7C50B, 0xFE3488D1,
+};
+
 BYTE *Map5_Wram;
+/* The 8KB page of Map5_Wram each of the eight RAM bank numbers selects */
+BYTE Map5_Wram_Page[ 8 ];
 BYTE *Map5_Ex_Vram;
 BYTE *Map5_Ex_Nam;
 BYTE (*mmc5_wave_buffers)[APU_MAX_SAMPLES_PER_SYNC];
@@ -31,10 +43,27 @@ BYTE Map5_Chr_Upper;
    the PPU uses A for sprite fetches and B for background fetches, but with 8x8
    sprites it uses this one set for both. */
 BYTE Map5_Chr_Last_Set;
+/* The last $5105 value, and whether the game has written one yet. Kept so a
+   loaded state can put the name table mapping back. */
+BYTE Map5_Nt_Reg;
+BYTE Map5_Nt_Set;
+
+/* PPU bank pointers for the two CHR register sets (0 = "A", 1 = "B"), and the
+   64 4K banks extended attribute mode can pick under the current $5130. Both
+   are rebuilt when the registers behind them are written, so the per-scanline
+   and per-tile paths never divide - the RP2040 has no divide instruction. */
+BYTE *Map5_Chr_Bank[ 2 ][ 8 ];
+BYTE *Map5_Ex_Chr_Bank[ 64 ];
 
 /* Forward declarations */
 void Map5_Sram( WORD wAddr, BYTE byData );
 void Map5_Sync_Prg_Banks( void );
+static void Map5_Sync_Chr_Set( BYTE bySet );
+static void Map5_Sync_Ex_Chr_Banks( void );
+static void Map5_Sync_Nametables( void );
+static int Map5_BlobSize( void );
+static void Map5_SaveBlob( BYTE *pBuf );
+static void Map5_LoadBlob( BYTE *pBuf );
 
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 5                                              */
@@ -110,13 +139,32 @@ void Map5_Init()
   }
   Map5_Chr_Last_Set = 1;
 
-  Map5_Wram = (BYTE *)Frens::f_malloc(0x2000 * 8);
+  /* Bank numbers 0-7 each select 8KB of PRG RAM, but boards wire them
+     differently: two-chip boards use bank bit 2 to pick the chip and ignore
+     bits 0-1, while single-chip boards (8KB or 32KB) use bits 0-1. An iNES
+     1.0 header carries no RAM size, so the two-chip boards are recognised by
+     CRC; everything else gets the 32KB layout. */
+  bool bTwoChips = false;
+  for ( uint32_t dwCrc : Map5_Two_Chip_Crcs )
+    if ( dwCrc == InfoNES_RomCrc )
+      bTwoChips = true;
+  for ( BYTE byBank = 0; byBank < 8; ++byBank )
+    Map5_Wram_Page[ byBank ] = bTwoChips ? ( byBank >> 2 ) : ( byBank & 0x03 );
+
+  Map5_Wram = (BYTE *)Frens::f_malloc(MAP5_WRAM_SIZE);
   Map5_Ex_Vram = (BYTE *)Frens::f_malloc(0x400);
   Map5_Ex_Nam = (BYTE *)Frens::f_malloc(0x400);
 
-  InfoNES_MemorySet( Map5_Wram, 0x00, 0x2000 * 8 );
+  InfoNES_MemorySet( Map5_Wram, 0x00, MAP5_WRAM_SIZE );
   InfoNES_MemorySet( Map5_Ex_Vram, 0x00, 0x400 );
   InfoNES_MemorySet( Map5_Ex_Nam, 0x00, 0x400 );
+
+  /* Save state and battery hooks (cleared on every reset, so install them here) */
+  MapperBlobSize = Map5_BlobSize;
+  MapperSaveBlob = Map5_SaveBlob;
+  MapperLoadBlob = Map5_LoadBlob;
+  MapperPrgRam = Map5_Wram;
+  MapperPrgRamSize = MAP5_WRAM_SIZE;
 
   Map5_Prg_Size = 3;
   Map5_Wram_Protect0 = 0;
@@ -124,6 +172,11 @@ void Map5_Init()
   Map5_Chr_Size = 3;
   Map5_Gfx_Mode = 0;
   Map5_Chr_Upper = 0;
+  Map5_Sync_Chr_Set( 0 );
+  Map5_Sync_Chr_Set( 1 );
+  Map5_Sync_Ex_Chr_Banks();
+  Map5_Nt_Reg = 0;
+  Map5_Nt_Set = 0;
 
   Map5_IRQ_Enable = 0;
   Map5_IRQ_Status = 0;
@@ -192,8 +245,6 @@ BYTE Map5_ReadApu( WORD wAddr )
 /*-------------------------------------------------------------------*/
 void Map5_Apu( WORD wAddr, BYTE byData )
 {
-  int nPage;
-
   switch ( wAddr )
   {
     case 0x5100:
@@ -205,6 +256,8 @@ void Map5_Apu( WORD wAddr, BYTE byData )
 
     case 0x5101:
       Map5_Chr_Size = byData & 0x03;
+      Map5_Sync_Chr_Set( 0 );
+      Map5_Sync_Chr_Set( 1 );
       break;
 
     case 0x5102:
@@ -226,41 +279,19 @@ void Map5_Apu( WORD wAddr, BYTE byData )
       break;
 
     case 0x5130:
-      Map5_Chr_Upper = byData & 0x03;
+      if ( Map5_Chr_Upper != ( byData & 0x03 ) )
+      {
+        Map5_Chr_Upper = byData & 0x03;
+        Map5_Sync_Chr_Set( 0 );
+        Map5_Sync_Chr_Set( 1 );
+        Map5_Sync_Ex_Chr_Banks();
+      }
       break;
 
     case 0x5105:
-      for ( nPage = 0; nPage < 4; nPage++ )
-      {
-        BYTE byNamReg;
-        
-        byNamReg = byData & 0x03;
-        byData = byData >> 2;
-
-        switch ( byNamReg )
-        {
-          case 0:
-#if 1
-            PPUBANK[ nPage + 8 ] = VRAMPAGE( 0 );
-#else
-            PPUBANK[ nPage + 8 ] = CRAMPAGE( 8 );
-#endif
-            break;
-          case 1:
-#if 1
-            PPUBANK[ nPage + 8 ] = VRAMPAGE( 1 );
-#else
-            PPUBANK[ nPage + 8 ] = CRAMPAGE( 9 );
-#endif
-            break;
-          case 2:
-            PPUBANK[ nPage + 8 ] = Map5_Ex_Vram;
-            break;
-          case 3:
-            PPUBANK[ nPage + 8 ] = Map5_Ex_Nam;
-            break;
-        }
-      }
+      Map5_Nt_Reg = byData;
+      Map5_Nt_Set = 1;
+      Map5_Sync_Nametables();
       break;
 
     case 0x5106:
@@ -296,6 +327,7 @@ void Map5_Apu( WORD wAddr, BYTE byData )
     case 0x5127:
       Map5_Chr_Reg[ wAddr & 0x07 ][ 0 ] = byData;
       Map5_Chr_Last_Set = 0;
+      Map5_Sync_Chr_Set( 0 );
       break;
 
     case 0x5128:
@@ -305,6 +337,7 @@ void Map5_Apu( WORD wAddr, BYTE byData )
       Map5_Chr_Reg[ ( wAddr & 0x03 ) + 0 ][ 1 ] = byData;
       Map5_Chr_Reg[ ( wAddr & 0x03 ) + 4 ][ 1 ] = byData;
       Map5_Chr_Last_Set = 1;
+      Map5_Sync_Chr_Set( 1 );
       break;
 
     case 0x5200:
@@ -390,7 +423,7 @@ void Map5_Sram( WORD wAddr, BYTE byData )
   {
     if ( Map5_Wram_Reg[ 3 ] != 0xff )
     {
-      Map5_Wram[ 0x2000 * Map5_Wram_Reg[ 3 ] + ( wAddr - 0x6000) ] = byData;
+      Map5_ROMPAGE( Map5_Wram_Reg[ 3 ] )[ wAddr - 0x6000 ] = byData;
     }
   }
 }
@@ -407,21 +440,24 @@ void Map5_Write( WORD wAddr, BYTE byData )
       case 0x8000:      /* $8000-$9fff */
         if ( Map5_Wram_Reg[ 4 ] != 0xff )
         {
-          Map5_Wram[ 0x2000 * Map5_Wram_Reg[ 4 ] + ( wAddr - 0x8000) ] = byData;
+          Map5_ROMPAGE( Map5_Wram_Reg[ 4 ] )[ wAddr - 0x8000 ] = byData;
+          SRAMwritten = true;
         }
         break;
 
       case 0xa000:      /* $a000-$bfff */
         if ( Map5_Wram_Reg[ 5 ] != 0xff )
         {
-          Map5_Wram[ 0x2000 * Map5_Wram_Reg[ 5 ] + ( wAddr - 0xa000) ] = byData;
+          Map5_ROMPAGE( Map5_Wram_Reg[ 5 ] )[ wAddr - 0xa000 ] = byData;
+          SRAMwritten = true;
         }
         break;
 
       case 0xc000:      /* $c000-$dfff */
         if ( Map5_Wram_Reg[ 6 ] != 0xff )
         {
-          Map5_Wram[ 0x2000 * Map5_Wram_Reg[ 6 ] + ( wAddr - 0xc000) ] = byData;
+          Map5_ROMPAGE( Map5_Wram_Reg[ 6 ] )[ wAddr - 0xc000 ] = byData;
+          SRAMwritten = true;
         }
         break;
     }
@@ -431,7 +467,7 @@ void Map5_Write( WORD wAddr, BYTE byData )
 /*-------------------------------------------------------------------*/
 /*  Mapper 5 H-Sync Function                                         */
 /*-------------------------------------------------------------------*/
-void Map5_HSync()
+void __not_in_flash_func(Map5_HSync)()
 {
   /* MMC5 has its own IRQ; prevent APU frame IRQ from interfering */
   FrameIRQ_Enable = 0;
@@ -475,16 +511,12 @@ void Map5_HSync()
 /*-------------------------------------------------------------------*/
 /*  Mapper 5 Rendering Screen Function                               */
 /*-------------------------------------------------------------------*/
-void Map5_RenderScreen( BYTE byMode )
+void __not_in_flash_func(Map5_RenderScreen)( BYTE byMode )
 {
-  DWORD dwPage[ 8 ];
-
-  /* Every bank index below is reduced modulo the CHR ROM size in 1K pages,
-     which is zero for a cartridge with no CHR ROM at all. A real MMC5 board
-     always has CHR ROM, but a malformed header can still claim mapper 5 with
-     0 CHR (Kkachi-wa Norae Chingu (Korea) does), and this runs once per
-     scanline - so it divided by zero on every line. There is nothing to remap
-     in that case: the CHR-RAM banks Map5_Init installed stay as they are. */
+  /* A real MMC5 board always has CHR ROM, but a malformed header can still
+     claim mapper 5 with none (Kkachi-wa Norae Chingu (Korea) does). There is
+     nothing to remap in that case: the CHR-RAM banks Map5_Init installed stay
+     as they are. */
   if ( NesHeader.byVRomSize == 0 )
     return;
 
@@ -496,6 +528,27 @@ void Map5_RenderScreen( BYTE byMode )
      Yakuman Tengoku's title screen and Genchou Hishi's map were both garbage. */
   const BYTE bySet = ( PPU_R0 & R0_SP_SIZE ) ? byMode : Map5_Chr_Last_Set;
 
+  /* This runs twice per scanline, so the pointers are worked out when a CHR
+     register is written (Map5_Sync_Chr_Set) and only copied here. */
+  BYTE * const *ppBank = Map5_Chr_Bank[ bySet ];
+  for ( int nPage = 0; nPage < 8; ++nPage )
+    PPUBANK[ nPage ] = ppBank[ nPage ];
+  InfoNES_SetupChr();
+}
+
+/*-------------------------------------------------------------------*/
+/*  Mapper 5 Sync Character Banks Functions                          */
+/*-------------------------------------------------------------------*/
+static void Map5_Sync_Chr_Set( BYTE bySet )
+{
+  /* Bank numbers are reduced modulo the CHR ROM size in 1K pages, which is
+     zero with no CHR ROM at all (see Map5_RenderScreen). */
+  const DWORD dwPages = NesHeader.byVRomSize << 3;
+  if ( dwPages == 0 )
+    return;
+
+  BYTE **ppBank = Map5_Chr_Bank[ bySet ];
+
   /* $5130 supplies the two bits above the 8 a bank register holds, which is
      what carries CHR larger than 256K in the finer banking modes. */
   #define Map5_CHR_BANK( n ) ( ( (DWORD)Map5_Chr_Upper << 8 ) | Map5_Chr_Reg[ n ][ bySet ] )
@@ -503,74 +556,175 @@ void Map5_RenderScreen( BYTE byMode )
   switch ( Map5_Chr_Size )
   {
     case 0:
-      dwPage[ 7 ] = ( Map5_CHR_BANK( 7 ) << 3 ) % ( NesHeader.byVRomSize << 3 );
-
-      PPUBANK[ 0 ] = VROMPAGE( dwPage[ 7 ] + 0 );
-      PPUBANK[ 1 ] = VROMPAGE( dwPage[ 7 ] + 1 );
-      PPUBANK[ 2 ] = VROMPAGE( dwPage[ 7 ] + 2 );
-      PPUBANK[ 3 ] = VROMPAGE( dwPage[ 7 ] + 3 );
-      PPUBANK[ 4 ] = VROMPAGE( dwPage[ 7 ] + 4 );
-      PPUBANK[ 5 ] = VROMPAGE( dwPage[ 7 ] + 5 );
-      PPUBANK[ 6 ] = VROMPAGE( dwPage[ 7 ] + 6 );
-      PPUBANK[ 7 ] = VROMPAGE( dwPage[ 7 ] + 7 );
-      InfoNES_SetupChr();
+    {
+      const DWORD dwPage = ( Map5_CHR_BANK( 7 ) << 3 ) % dwPages;
+      for ( int nPage = 0; nPage < 8; ++nPage )
+        ppBank[ nPage ] = VROMPAGE( dwPage + nPage );
       break;
+    }
 
     case 1:
-      dwPage[ 3 ] = ( Map5_CHR_BANK( 3 ) << 2 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 7 ] = ( Map5_CHR_BANK( 7 ) << 2 ) % ( NesHeader.byVRomSize << 3 );
-
-      PPUBANK[ 0 ] = VROMPAGE( dwPage[ 3 ] + 0 );
-      PPUBANK[ 1 ] = VROMPAGE( dwPage[ 3 ] + 1 );
-      PPUBANK[ 2 ] = VROMPAGE( dwPage[ 3 ] + 2 );
-      PPUBANK[ 3 ] = VROMPAGE( dwPage[ 3 ] + 3 );
-      PPUBANK[ 4 ] = VROMPAGE( dwPage[ 7 ] + 0 );
-      PPUBANK[ 5 ] = VROMPAGE( dwPage[ 7 ] + 1 );
-      PPUBANK[ 6 ] = VROMPAGE( dwPage[ 7 ] + 2 );
-      PPUBANK[ 7 ] = VROMPAGE( dwPage[ 7 ] + 3 );
-     InfoNES_SetupChr();
+    {
+      const DWORD dwPage3 = ( Map5_CHR_BANK( 3 ) << 2 ) % dwPages;
+      const DWORD dwPage7 = ( Map5_CHR_BANK( 7 ) << 2 ) % dwPages;
+      for ( int nPage = 0; nPage < 4; ++nPage )
+      {
+        ppBank[ nPage + 0 ] = VROMPAGE( dwPage3 + nPage );
+        ppBank[ nPage + 4 ] = VROMPAGE( dwPage7 + nPage );
+      }
       break;
+    }
 
     case 2:
-      dwPage[ 1 ] = ( Map5_CHR_BANK( 1 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 3 ] = ( Map5_CHR_BANK( 3 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 5 ] = ( Map5_CHR_BANK( 5 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 7 ] = ( Map5_CHR_BANK( 7 ) << 1 ) % ( NesHeader.byVRomSize << 3 );
-
-      PPUBANK[ 0 ] = VROMPAGE( dwPage[ 1 ] + 0 );
-      PPUBANK[ 1 ] = VROMPAGE( dwPage[ 1 ] + 1 );
-      PPUBANK[ 2 ] = VROMPAGE( dwPage[ 3 ] + 0 );
-      PPUBANK[ 3 ] = VROMPAGE( dwPage[ 3 ] + 1 );
-      PPUBANK[ 4 ] = VROMPAGE( dwPage[ 5 ] + 0 );
-      PPUBANK[ 5 ] = VROMPAGE( dwPage[ 5 ] + 1 );
-      PPUBANK[ 6 ] = VROMPAGE( dwPage[ 7 ] + 0 );
-      PPUBANK[ 7 ] = VROMPAGE( dwPage[ 7 ] + 1 );
-      InfoNES_SetupChr();
+      for ( int nPage = 0; nPage < 8; nPage += 2 )
+      {
+        const DWORD dwPage = ( Map5_CHR_BANK( nPage + 1 ) << 1 ) % dwPages;
+        ppBank[ nPage + 0 ] = VROMPAGE( dwPage + 0 );
+        ppBank[ nPage + 1 ] = VROMPAGE( dwPage + 1 );
+      }
       break;
 
     default:
-      dwPage[ 0 ] = Map5_CHR_BANK( 0 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 1 ] = Map5_CHR_BANK( 1 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 2 ] = Map5_CHR_BANK( 2 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 3 ] = Map5_CHR_BANK( 3 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 4 ] = Map5_CHR_BANK( 4 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 5 ] = Map5_CHR_BANK( 5 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 6 ] = Map5_CHR_BANK( 6 ) % ( NesHeader.byVRomSize << 3 );
-      dwPage[ 7 ] = Map5_CHR_BANK( 7 ) % ( NesHeader.byVRomSize << 3 );
-
-      PPUBANK[ 0 ] = VROMPAGE( dwPage[ 0 ] );
-      PPUBANK[ 1 ] = VROMPAGE( dwPage[ 1 ] );
-      PPUBANK[ 2 ] = VROMPAGE( dwPage[ 2 ] );
-      PPUBANK[ 3 ] = VROMPAGE( dwPage[ 3 ] );
-      PPUBANK[ 4 ] = VROMPAGE( dwPage[ 4 ] );
-      PPUBANK[ 5 ] = VROMPAGE( dwPage[ 5 ] );
-      PPUBANK[ 6 ] = VROMPAGE( dwPage[ 6 ] );
-      PPUBANK[ 7 ] = VROMPAGE( dwPage[ 7 ] );
-      InfoNES_SetupChr();
+      for ( int nPage = 0; nPage < 8; ++nPage )
+        ppBank[ nPage ] = VROMPAGE( Map5_CHR_BANK( nPage ) % dwPages );
       break;
   }
 
   #undef Map5_CHR_BANK
+}
+
+static void Map5_Sync_Ex_Chr_Banks( void )
+{
+  const DWORD dwPages = NesHeader.byVRomSize << 3;
+  if ( dwPages == 0 )
+    return;
+
+  /* In extended attribute mode each tile's 4K bank is its ExRAM byte's low 6
+     bits under the two $5130 bits. The page count is a multiple of 8 and a 4K
+     bank starts on a multiple of 4, so the 1K page within it that the tile
+     index adds (0-3) never needs reducing again. */
+  for ( int nBank = 0; nBank < 64; ++nBank )
+    Map5_Ex_Chr_Bank[ nBank ] =
+      VROMPAGE( ( ( ( (DWORD)Map5_Chr_Upper << 6 ) | nBank ) << 2 ) % dwPages );
+}
+
+/*-------------------------------------------------------------------*/
+/*  Mapper 5 Sync Name Tables Function                               */
+/*-------------------------------------------------------------------*/
+static void Map5_Sync_Nametables( void )
+{
+  /* $5105 gives each of the four name table slots a source, two bits each:
+     CIRAM page 0 or 1, ExRAM, or the fill-mode table. */
+  BYTE byNt = Map5_Nt_Reg;
+  for ( int nPage = 0; nPage < 4; ++nPage, byNt >>= 2 )
+  {
+    switch ( byNt & 0x03 )
+    {
+      case 0:
+        PPUBANK[ nPage + 8 ] = VRAMPAGE( 0 );
+        break;
+      case 1:
+        PPUBANK[ nPage + 8 ] = VRAMPAGE( 1 );
+        break;
+      case 2:
+        PPUBANK[ nPage + 8 ] = Map5_Ex_Vram;
+        break;
+      case 3:
+        PPUBANK[ nPage + 8 ] = Map5_Ex_Nam;
+        break;
+    }
+  }
+}
+
+/*-------------------------------------------------------------------*/
+/*  Save state support                                               */
+/*-------------------------------------------------------------------*/
+/* The blob carries the registers, ExRAM and the fill-mode name table. The
+   32KB of PRG RAM goes straight into the state file (MapperPrgRam), so it is
+   not staged a second time here - an RP2040 has no room for that. Only bytes,
+   so the layout has no padding. */
+struct Map5_Blob
+{
+  BYTE Prg_Reg[ 8 ];
+  BYTE Wram_Reg[ 8 ];
+  BYTE Chr_Reg[ 8 ][ 2 ];
+  BYTE IRQ_Enable, IRQ_Status, IRQ_Line;
+  BYTE Value0, Value1;
+  BYTE Wram_Protect0, Wram_Protect1;
+  BYTE Prg_Size, Chr_Size, Gfx_Mode, Chr_Upper, Chr_Last_Set;
+  BYTE Nt_Reg, Nt_Set;
+  BYTE Ex_Vram[ 0x400 ];
+  BYTE Ex_Nam[ 0x400 ];
+};
+
+static int Map5_BlobSize( void )
+{
+  return sizeof( Map5_Blob );
+}
+
+static void Map5_SaveBlob( BYTE *pBuf )
+{
+  Map5_Blob *pBlob = (Map5_Blob *)pBuf;
+
+  InfoNES_MemoryCopy( pBlob->Prg_Reg, Map5_Prg_Reg, sizeof( Map5_Prg_Reg ) );
+  InfoNES_MemoryCopy( pBlob->Wram_Reg, Map5_Wram_Reg, sizeof( Map5_Wram_Reg ) );
+  InfoNES_MemoryCopy( pBlob->Chr_Reg, Map5_Chr_Reg, sizeof( Map5_Chr_Reg ) );
+  pBlob->IRQ_Enable = Map5_IRQ_Enable;
+  pBlob->IRQ_Status = Map5_IRQ_Status;
+  pBlob->IRQ_Line = Map5_IRQ_Line;
+  pBlob->Value0 = (BYTE)Map5_Value0;
+  pBlob->Value1 = (BYTE)Map5_Value1;
+  pBlob->Wram_Protect0 = Map5_Wram_Protect0;
+  pBlob->Wram_Protect1 = Map5_Wram_Protect1;
+  pBlob->Prg_Size = Map5_Prg_Size;
+  pBlob->Chr_Size = Map5_Chr_Size;
+  pBlob->Gfx_Mode = Map5_Gfx_Mode;
+  pBlob->Chr_Upper = Map5_Chr_Upper;
+  pBlob->Chr_Last_Set = Map5_Chr_Last_Set;
+  pBlob->Nt_Reg = Map5_Nt_Reg;
+  pBlob->Nt_Set = Map5_Nt_Set;
+  InfoNES_MemoryCopy( pBlob->Ex_Vram, Map5_Ex_Vram, 0x400 );
+  InfoNES_MemoryCopy( pBlob->Ex_Nam, Map5_Ex_Nam, 0x400 );
+}
+
+static void Map5_LoadBlob( BYTE *pBuf )
+{
+  const Map5_Blob *pBlob = (const Map5_Blob *)pBuf;
+
+  InfoNES_MemoryCopy( Map5_Prg_Reg, pBlob->Prg_Reg, sizeof( Map5_Prg_Reg ) );
+  InfoNES_MemoryCopy( Map5_Wram_Reg, pBlob->Wram_Reg, sizeof( Map5_Wram_Reg ) );
+  InfoNES_MemoryCopy( Map5_Chr_Reg, pBlob->Chr_Reg, sizeof( Map5_Chr_Reg ) );
+  Map5_IRQ_Enable = pBlob->IRQ_Enable;
+  Map5_IRQ_Status = pBlob->IRQ_Status;
+  Map5_IRQ_Line = pBlob->IRQ_Line;
+  Map5_Value0 = pBlob->Value0;
+  Map5_Value1 = pBlob->Value1;
+  Map5_Wram_Protect0 = pBlob->Wram_Protect0;
+  Map5_Wram_Protect1 = pBlob->Wram_Protect1;
+  Map5_Prg_Size = pBlob->Prg_Size;
+  Map5_Chr_Size = pBlob->Chr_Size;
+  Map5_Gfx_Mode = pBlob->Gfx_Mode;
+  Map5_Chr_Upper = pBlob->Chr_Upper;
+  Map5_Chr_Last_Set = pBlob->Chr_Last_Set;
+  Map5_Nt_Reg = pBlob->Nt_Reg;
+  Map5_Nt_Set = pBlob->Nt_Set;
+  InfoNES_MemoryCopy( Map5_Ex_Vram, pBlob->Ex_Vram, 0x400 );
+  InfoNES_MemoryCopy( Map5_Ex_Nam, pBlob->Ex_Nam, 0x400 );
+
+  /* MapperLoadBlob runs last in LoadState, after state.cpp has rebuilt
+     ROMBANK and PPUBANK from bank indices. Those indices are measured from
+     ROM, VROM and PPURAM, so every window MMC5 had pointed into its own
+     memory - PRG RAM at $6000-$DFFF, ExRAM or the fill table as a name
+     table - came back wrong. Rebuild them all from the registers. */
+  Map5_Sync_Prg_Banks();
+  SRAMBANK = ( Map5_Wram_Reg[ 3 ] != 0xff ) ? Map5_ROMPAGE( Map5_Wram_Reg[ 3 ] ) : SRAM;
+  Map5_Sync_Chr_Set( 0 );
+  Map5_Sync_Chr_Set( 1 );
+  Map5_Sync_Ex_Chr_Banks();
+  /* Until the game writes $5105 the header mirroring state.cpp restored
+     stands. */
+  if ( Map5_Nt_Set )
+    Map5_Sync_Nametables();
 }
 
 /*-------------------------------------------------------------------*/

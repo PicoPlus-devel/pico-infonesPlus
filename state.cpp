@@ -202,6 +202,7 @@ __attribute__((weak)) int pAPU_Load(const void *blob, size_t size)
 #define SAVESTATE_FLAG_CHR_RAM      0x01
 #define SAVESTATE_FLAG_REGION_SHIFT 1
 #define SAVESTATE_FLAG_REGION_MASK  (0x3u << SAVESTATE_FLAG_REGION_SHIFT)
+#define SAVESTATE_FLAG_MAPPER_PRG_RAM 0x08 // MapperPrgRam follows the name table RAM
 // Backwards compatibility: the old "PAL flag" was just bit 1, which now reads
 // as INFONES_REGION_PAL=1 in the 2-bit region field. NTSC=0 (no flag) and
 // Dendy=2 fit in bits 1..2 without colliding with old saves.
@@ -403,6 +404,7 @@ int Emulator_SaveState(const char *path)
   if (NesHeader.byVRomSize == 0) hdr.flags |= SAVESTATE_FLAG_CHR_RAM;
   hdr.flags |= ((uint32_t)InfoNES_GetRegion() << SAVESTATE_FLAG_REGION_SHIFT)
                & SAVESTATE_FLAG_REGION_MASK;
+  if (MapperPrgRam) hdr.flags |= SAVESTATE_FLAG_MAPPER_PRG_RAM;
 
   struct SaveCore *coreDyn;
   coreDyn = (struct SaveCore *)Frens::f_malloc(sizeof(SaveCore));
@@ -612,6 +614,16 @@ int Emulator_SaveState(const char *path)
     return -1;
   }
 
+  // PRG RAM the mapper keeps outside SRAM (MMC5). Written straight from the
+  // buffer for the same reason as the CHR RAM above.
+  if (MapperPrgRam && !w(MapperPrgRam, MapperPrgRamSize))
+  {
+    f_close(&fp);
+    printf("SaveState: failed to write mapper PRG RAM\n");
+    if (mapperBlob) Frens::f_free(mapperBlob);
+    return -1;
+  }
+
   // Mapper / APU blobs length + payload
   if (!w(&mapperSize, sizeof mapperSize))
   {
@@ -684,6 +696,16 @@ int Emulator_LoadState(const char *path)
     f_close(&fp);
     return -1;
   }
+
+  // A mapper with PRG RAM of its own (MMC5) needs it in the file, and states
+  // saved before that was added do not have it. Refuse those here, before any
+  // live buffer is overwritten, instead of misreading the rest of the file.
+  if (((hdr.flags & SAVESTATE_FLAG_MAPPER_PRG_RAM) != 0) != (MapperPrgRam != nullptr))
+  {
+    printf("LoadState: mapper PRG RAM layout differs from this build, refusing state\n");
+    f_close(&fp);
+    return -1;
+  }
   struct SaveCore *coreDyn;
   coreDyn = (struct SaveCore *)Frens::f_malloc(sizeof(SaveCore));
   // Use dynamic allocation to avoid stack overflow on constrained systems
@@ -727,6 +749,15 @@ int Emulator_LoadState(const char *path)
   {
     f_close(&fp);
     printf("LoadState: failed to read mapper name table RAM\n");
+    Frens::f_free(coreDyn);
+    return -1;
+  }
+
+  // PRG RAM stored outside SRAM (see Emulator_SaveState)
+  if (MapperPrgRam && !r(MapperPrgRam, MapperPrgRamSize))
+  {
+    f_close(&fp);
+    printf("LoadState: failed to read mapper PRG RAM\n");
     Frens::f_free(coreDyn);
     return -1;
   }

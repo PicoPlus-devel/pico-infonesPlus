@@ -159,6 +159,10 @@ const WORD __not_in_flash_func(NesPalette)[64] = {
 #if 1
 #if !HSTX
 // RGB565 to RGB444
+// $2D and $3D are greys on a real 2C02, not blacks: only $0D/$1D and the
+// $xE/$xF columns are black. Games use them for dimmed text (the unselected
+// menu entry in Bio Hazard), so leaving them at 0 makes that text vanish.
+// The HSTX table below has always had them right.
 #define CC(x) (((x >> 1) & 15) | (((x >> 6) & 15) << 4) | (((x >> 11) & 15) << 8))
 const WORD __not_in_flash_func(NesPalette)[64] = {
     CC(0x39ce), CC(0x1071), CC(0x0015), CC(0x2013), CC(0x440e), CC(0x5402), CC(0x5000), CC(0x3c20),
@@ -166,9 +170,9 @@ const WORD __not_in_flash_func(NesPalette)[64] = {
     CC(0x5ef7), CC(0x01dd), CC(0x10fd), CC(0x401e), CC(0x5c17), CC(0x700b), CC(0x6ca0), CC(0x6521),
     CC(0x45c0), CC(0x0240), CC(0x02a0), CC(0x0247), CC(0x0211), CC(0x0000), CC(0x0000), CC(0x0000),
     CC(0x7fff), CC(0x1eff), CC(0x2e5f), CC(0x223f), CC(0x79ff), CC(0x7dd6), CC(0x7dcc), CC(0x7e67),
-    CC(0x7ae7), CC(0x4342), CC(0x2769), CC(0x2ff3), CC(0x03bb), CC(0x0000), CC(0x0000), CC(0x0000),
+    CC(0x7ae7), CC(0x4342), CC(0x2769), CC(0x2ff3), CC(0x03bb), CC(0x294a), CC(0x0000), CC(0x0000),
     CC(0x7fff), CC(0x579f), CC(0x635f), CC(0x6b3f), CC(0x7f1f), CC(0x7f1b), CC(0x7ef6), CC(0x7f75),
-    CC(0x7f94), CC(0x73f4), CC(0x57d7), CC(0x5bf9), CC(0x4ffe), CC(0x0000), CC(0x0000), CC(0x0000)};
+    CC(0x7f94), CC(0x73f4), CC(0x57d7), CC(0x5bf9), CC(0x4ffe), CC(0x5ad6), CC(0x0000), CC(0x0000)};
 #else
 // RGB888 to RGB555
 #define CC(c) (((c & 0xf8) >> 3) | ((c & 0xf800) >> 6) | ((c & 0xf80000) >> 9))
@@ -229,6 +233,20 @@ void saveNVRAM()
         printf("SRAM not updated.\n");
         return;
     }
+    // A mapper with PRG RAM of its own (MMC5) keeps the battery-backed data
+    // there instead of in SRAM, and without a battery there is nothing to keep.
+    BYTE *pSave = SRAM;
+    size_t saveSize = SRAM_SIZE;
+    if (MapperPrgRam)
+    {
+        if (!ROM_SRAM)
+        {
+            SRAMwritten = false;
+            return;
+        }
+        pSave = MapperPrgRam;
+        saveSize = MapperPrgRamSize;
+    }
     snprintf(pad, FF_MAX_LFN, "%s/%s.SAV", GAMESAVEDIR, fileName);
     printf("Save SRAM to %s\n", pad);
     FIL fil;
@@ -241,10 +259,10 @@ void saveNVRAM()
         return;
     }
     size_t bytesWritten;
-    fr = f_write(&fil, SRAM, SRAM_SIZE, &bytesWritten);
-    if (bytesWritten < SRAM_SIZE)
+    fr = f_write(&fil, pSave, saveSize, &bytesWritten);
+    if (bytesWritten < saveSize)
     {
-        snprintf(ErrorMessage, ERRORMESSAGESIZE, "Error writing save: %d %d/%d written", fr, bytesWritten, SRAM_SIZE);
+        snprintf(ErrorMessage, ERRORMESSAGESIZE, "Error writing save: %d %d/%d written", fr, (int)bytesWritten, (int)saveSize);
         printf("%s\n", ErrorMessage);
     }
     f_close(&fil);
@@ -326,6 +344,61 @@ bool loadNVRAM()
     }
     SRAMwritten = false;
     return ok;
+}
+
+// PRG RAM a mapper keeps outside SRAM (MMC5) is allocated by the mapper's
+// init, which InfoNES_Reset runs after loadNVRAM, so it is loaded here. Only a
+// file of exactly that size is used: a smaller one was written by an older
+// build, which saved the SRAM these games never use.
+bool loadMapperNVRAM()
+{
+    if (!MapperPrgRam || !ROM_SRAM)
+    {
+        return true;
+    }
+    char pad[FF_MAX_LFN];
+    char fileName[FF_MAX_LFN];
+    strcpy(fileName, Frens::GetfileNameFromFullPath(romName));
+    Frens::stripextensionfromfilename(fileName);
+    snprintf(pad, FF_MAX_LFN, "%s/%s.SAV", GAMESAVEDIR, fileName);
+
+    FILINFO fno;
+    FRESULT fr = f_stat(pad, &fno);
+    if (fr == FR_NO_FILE)
+    {
+        return true;
+    }
+    if (fr != FR_OK)
+    {
+        snprintf(ErrorMessage, ERRORMESSAGESIZE, "f_stat() failed on save file: %d", fr);
+        printf("%s\n", ErrorMessage);
+        return false;
+    }
+    if (fno.fsize != MapperPrgRamSize)
+    {
+        printf("Ignoring %s: %u bytes, expected %u\n", pad, (unsigned)fno.fsize, (unsigned)MapperPrgRamSize);
+        return true;
+    }
+    FIL fil;
+    fr = f_open(&fil, pad, FA_READ);
+    if (fr != FR_OK)
+    {
+        snprintf(ErrorMessage, ERRORMESSAGESIZE, "Cannot open save file: %d", fr);
+        printf("%s\n", ErrorMessage);
+        return false;
+    }
+    UINT bytesRead;
+    fr = f_read(&fil, MapperPrgRam, MapperPrgRamSize, &bytesRead);
+    f_close(&fil);
+    if (fr != FR_OK || bytesRead != MapperPrgRamSize)
+    {
+        snprintf(ErrorMessage, ERRORMESSAGESIZE, "Cannot read save file: %d %d/%d read", fr, (int)bytesRead, (int)MapperPrgRamSize);
+        printf("%s\n", ErrorMessage);
+        return false;
+    }
+    printf("Mapper PRG RAM read from %s\n", pad);
+    SRAMwritten = false;
+    return true;
 }
 
 static DWORD prevButtons[2]{};
@@ -1508,6 +1581,10 @@ bool loadAndReset()
     if (InfoNES_Reset() < 0)
     {
         printf("NES reset error.\n");
+        return false;
+    }
+    if (loadMapperNVRAM() == false)
+    {
         return false;
     }
     return true;

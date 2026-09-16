@@ -83,9 +83,14 @@ extern BYTE *SPRRAM;
 #define SPR_ATTR_H_FLIP 0x40
 #define SPR_ATTR_PRI 0x20
 
+#define SPRRAM2_SPR_LIMIT 8  // maximum number of sprites per scanline
+
 /* PPU Register */
 extern BYTE PPU_R0;
 extern BYTE PPU_R1;
+/* Every $2001 value seen during the current scanline's CPU slice, ORed
+   together. See R1_Line_Crcs in InfoNES.cpp. */
+extern BYTE PPU_R1_Line;
 extern BYTE PPU_R2;
 extern BYTE PPU_R3;
 extern BYTE PPU_R7;
@@ -159,6 +164,28 @@ extern WORD STEP_PER_SCANLINE;
 extern WORD STEP_PER_FRAME;
 extern WORD SCAN_VBLANK_START;
 extern WORD SCAN_VBLANK_END;
+
+// A scanline is not a whole number of CPU cycles: 341 PPU dots is 113 2/3 CPU
+// cycles on NTSC. Stepping a flat STEP_PER_SCANLINE of 114 therefore runs an
+// NTSC frame 88 cycles long, every frame, always in the same direction.
+//
+// SCANLINE_FRAC_NUM/DEN is the fraction of a cycle a scanline hands back: the
+// emulation loop keeps a free-running accumulator and drops one cycle from the
+// line each time it wraps, so the frame averages the length hardware makes it
+// (29780 2/3 with 1/3 on NTSC). It is 0 - the flat scanline this core has
+// always run - for every ROM except those listed in Ntsc_Exact_Frame_Crcs in
+// InfoNES.cpp, because the change is not free for other games; that list says
+// which ones and why.
+//
+// Games do notice. The usual region-detection idiom spins a delay loop tuned
+// to just outrun one NTSC frame and then reads $2002 to see whether vblank has
+// arrived, and 88 cycles is the whole margin. Project Blue (mapper 111) then
+// enables NMI a few cycles further on, so with the frame running long it took
+// its first NMI in the middle of its own init - before the bank number the NMI
+// handler reads had been stored, which left the sound call banked to 0 and the
+// game in a screen it never drew.
+extern WORD SCANLINE_FRAC_NUM;
+extern WORD SCANLINE_FRAC_DEN;
 
 /* Develop Scroll Registers */
 #if 0
@@ -309,6 +336,13 @@ extern DWORD MapperChrRamSize;
 // to the state file twice. Same non-owning contract as MapperChrRam.
 extern BYTE *MapperNtRam;
 extern DWORD MapperNtRamSize;
+
+// PRG RAM owned by a mapper and living outside SRAM (MMC5 has up to 32KB),
+// registered by the mapper's init. Same non-owning contract as MapperChrRam.
+// state.cpp writes it to the state file, and on a cartridge with a battery it
+// is what the .SAV file holds instead of SRAM (see main.cpp).
+extern BYTE *MapperPrgRam;
+extern DWORD MapperPrgRamSize;
 
 /*-------------------------------------------------------------------*/
 /*  ROM information                                                  */
