@@ -1283,7 +1283,7 @@ Behaviour depends on where controllers are connected on your board.
 | Controllers on a separate USB port (boards built with PIO USB, such as the Fruit Jam) | The console's own USB port is free, so controllers keep working and the screen stays on. The menu returns to the game list when you are done. |
 | Controllers on the console's own USB port | That port is the one connected to the computer, so a USB controller cannot be used while the card is mounted. Press B on a controller in the NES port, or eject the drive on the computer. The console restarts afterwards. |
 | RP2040 boards | As above, and the screen is switched off for as long as the card is mounted. These boards cannot drive the video output while the computer is reading the card. The menu explains this first and lets you go back without mounting anything. |
-| SpotPear HDMI board | This board has no NES controller port, so with the USB port connected to the computer there is no button to press at all. Eject the drive on the computer to return. If no computer ever mounts the card, the console returns to the menu by itself after 20 seconds. |
+
 
 > [!CAUTION]
 > Eject the drive on the computer rather than pressing B. Ejecting makes the computer write out
