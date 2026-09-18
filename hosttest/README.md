@@ -21,7 +21,7 @@ unlocks MMC5, VRC7 CHR-RAM, the Famicom Disk System (FDS), and the
 | `shim/pico/time.h` | host `time_us_32` from `clock_gettime` |
 | `shim/ff.h` | minimal FatFs surface — backed by stdio in `stubs.cpp` |
 | `shim/FrensHelpers.h` | minimal `Frens::*` declarations the core needs; replaces the real (heavy) `pico_shared/FrensHelpers.h` |
-| `shim/settings.h` | minimal `settings` struct used by `FDS_AutoInsertEnabled` |
+| `shim/settings.h` | minimal `settings` struct used by `FDS_AutoInsertEnabled` and the sprite limit |
 | `ppm2png.py` | PPM → PNG converter, Python stdlib only (no PIL/ImageMagick needed) |
 
 ## Build
@@ -88,6 +88,7 @@ save files (`*.SAV`) are written under `$NES_FAT_ROOT/saves/`.
 | `NES_SAVE_STATE=<frame>` | call `Emulator_SaveState` at that frame |
 | `NES_LOAD_STATE=<frame>` | call `Emulator_LoadState` at that frame |
 | `NES_STATE_PATH=<file>` | state file for the two above; default `<outdir>/host.state` |
+| `NES_NO_SPRITE_LIMIT=1` | draw every sprite on a scanline, like the settings menu's Sprite Limit OFF; default is the hardware limit of 8 |
 
 `NES_SAVE_STATE` / `NES_LOAD_STATE` print `SAVESTATE frame=N rc=R` and
 `LOADSTATE frame=N rc=R`, so `state.cpp` can be exercised without a board. Note

@@ -1,6 +1,7 @@
 # CHANGELOG
 
 Fix for *Arkanoid* on the custom PCB and the Adafruit breadboard setup: the paddle was stuck on the right side of the screen.
+The 8-sprites-per-line limit from v0.50 can now be turned off in the settings menu.
 
 # General Info
 
@@ -21,6 +22,10 @@ Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (reco
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
 # v0.51
+
+## New
+
+- New **Sprite Limit (8 per line)** setting. v0.50 limited the number of sprites per line to 8, like a real NES, which makes some games flicker. Turn the setting off for less flicker. It is on by default, because a few games such as *Felix the Cat* need it.
 
 ## Fixes
 
