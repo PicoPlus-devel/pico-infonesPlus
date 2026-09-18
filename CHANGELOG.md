@@ -1,8 +1,7 @@
 # CHANGELOG
 
-MMC5 games such as *Castlevania III* and the Koei strategy games now run on RP2040 boards as well.
-Mapper 196 is now supported, so *Super Bros. 11 - Mario Adventures* runs. 
-Mapper 15 games such as *Bio Hazard* now run.
+Fix for *Arkanoid* on the custom PCB and the Adafruit breadboard setup: the paddle was stuck on the right side of the screen.
+The 8-sprites-per-line limit from v0.50 can now be turned off in the settings menu.
 
 # General Info
 
@@ -21,6 +20,16 @@ This can be fixed permanently with the [flash_config](https://github.com/fhoedem
 Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then requires erasing the flash with `universal_flash_nuke.uf2` first), and even after the fix these boards top out at 252 MHz — so the **Overclock** setting, and with it the VRC7 audio of *Lagrange Point (JP)*, cannot be used on them.
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
+
+# v0.51
+
+## New
+
+- New **Sprite Limit (8 per line)** setting. v0.50 limited the number of sprites per line to 8, like a real NES, which makes some games flicker. Turn the setting off for less flicker. It is on by default, because a few games such as *Felix the Cat* need it.
+
+## Fixes
+
+- *Arkanoid* on the custom PCB and the Adafruit breadboard setup (the `piconesPlus_AdafruitDVISD_*` binaries): the paddle was stuck on the right side of the screen and ignored the D-pad. Since v0.46 the emulator thought a Zapper was plugged into port 2, even when the port was empty or had a normal controller in it ([#234](https://github.com/fhoedemakers/pico-infonesPlus/issues/234)). Thanks to [PetersonL-tech](https://github.com/PetersonL-tech).
 
 # v0.50
 

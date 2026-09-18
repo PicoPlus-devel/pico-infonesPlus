@@ -1420,7 +1420,7 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   int nSprData;
   BYTE bySprCol;
   BYTE pSprBuf[NES_DISP_WIDTH + 7];
-  BYTE *SPRRAM2[SPRRAM2_SPR_LIMIT];
+  BYTE SPRRAM2[64]; // SPRRAM offsets of the sprites on this line; room for all 64 when the limit is off
 
   /* $2001 as it is at the end of the line's CPU slice, plus - for the ROMs in
      R1_Line_Crcs only - any layer that was on earlier in the slice. */
@@ -1743,6 +1743,9 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     const int patternTableIdSP88 = PPU_R0 & R0_SP_ADDR ? 1 : 0;
     const int bankOfsSP88 = patternTableIdSP88 << 2;
 
+    // Settings menu "Sprite Limit": off draws every sprite on the line
+    const int nSprLimit = settings.flags.removeSpriteLimit ? 64 : SPRRAM2_SPR_LIMIT;
+
     // Render a sprite to the sprite buffer
     nIdx = 0;
     for (pSPRRAM = SPRRAM; pSPRRAM <= (SPRRAM + (63 << 2)); pSPRRAM += 4)
@@ -1755,20 +1758,20 @@ void __not_in_flash_func(InfoNES_DrawLine)()
       /*  A sprite in scanning line                                        */
       /*-------------------------------------------------------------------*/
 
-      // If number of sprites <= SPRRAM2_SPR_LIMIT, copy SPRRAM sprite address to SPRRAM2
-      SPRRAM2[nIdx++] = pSPRRAM;
+      // If number of sprites <= nSprLimit, copy SPRRAM sprite offset to SPRRAM2
+      SPRRAM2[nIdx++] = pSPRRAM - SPRRAM;
 
-      if (nIdx == SPRRAM2_SPR_LIMIT)  // SPRRAM2 buffer full
-      {
-        PPU_R2 |= R2_MAX_SP; // Set a flag of maximum sprites on scanline
+      if (nIdx == SPRRAM2_SPR_LIMIT)
+        PPU_R2 |= R2_MAX_SP; // Set a flag of maximum sprites on scanline, also with the limit off
+
+      if (nIdx == nSprLimit)  // SPRRAM2 buffer full
         break;
-      }
 
     }
 
     while (nIdx--)
     {
-      pSPRRAM = SPRRAM2[nIdx];
+      pSPRRAM = SPRRAM + SPRRAM2[nIdx];
       nY = pSPRRAM[SPR_Y] + 1;
 
       nAttr = pSPRRAM[SPR_ATTR];

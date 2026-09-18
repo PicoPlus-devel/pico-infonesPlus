@@ -110,15 +110,18 @@ void zapperPoll(void)
     /* Presence detection.
      *
      * Nothing plugged in, or a plain NES/SNES pad: both pins are held high by
-     * the internal pull-ups, so bits == ZAPPER_BITS_IDLE (0x18).
+     * the internal pull-ups, so bits == ZAPPER_BITS_IDLE. That is 0x10 with the
+     * default light-line inversion, not 0x18: comparing against 0x18 made an
+     * empty port look like a Zapper, and the overlay then fed Arkanoid a Vaus
+     * paddle stuck at one end.
      *
-     * A Zapper actively drives the trigger line to the "not half-pulled" state
-     * (logical 0) for as long as the trigger is released, and drives the light
-     * line to 0 whenever its sensor sees light. Either makes bits != 0x18.
+     * A Zapper actively pulls the trigger pin low for as long as the trigger is
+     * released, and pulls the light pin low whenever its sensor sees no light.
+     * Either makes bits != ZAPPER_BITS_IDLE.
      *
      * The latch is sticky and never cleared while running: while the trigger is
-     * half-pulled and the sensor sees no light, a connected Zapper reads 0x18
-     * as well and is momentarily indistinguishable from an empty port. Clearing
+     * half-pulled and the sensor sees light, both pins of a connected Zapper are
+     * high and it is momentarily indistinguishable from an empty port. Clearing
      * the flag there would drop the very trigger event being reported.
      */
     if (!zapperconnected && bits != ZAPPER_BITS_IDLE)
