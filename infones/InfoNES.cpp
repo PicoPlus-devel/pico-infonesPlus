@@ -718,6 +718,8 @@ int InfoNES_Reset()
   /*-------------------------------------------------------------------*/
 
   K6502_Reset();
+  // Needs the cycle counter K6502_Reset() just cleared
+  ApuDmcIrqReset();
 
   // NSF: override CPU state after reset (A=track, X=region, SP=$FD, PC=$4100)
   if (IsNSF)

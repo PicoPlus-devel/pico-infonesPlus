@@ -194,8 +194,8 @@ static inline BYTE __not_in_flash_func(K6502_Read)(WORD wAddr)
       }
       if (ApuC4Atl > 0)
         byRet |= (1 << 3);
-      if (ApuC5DmaLength > 0)
-        byRet |= (1 << 4);
+      // DMC: bit 4 sample playing, bit 7 IRQ
+      byRet |= ApuDmcIrqStatus();
 
       // FrameIRQ
       if (APU_Reg[0x15] & 0x40)
@@ -445,11 +445,17 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
     case 0x0d:
     case 0x0e:
     case 0x0f:
+      // Call Function corresponding to Sound Registers
+      if (!APU_Mute)
+        pAPUSoundRegs[wAddr & 0x1f](wAddr, byData);
+      break;
+
     case 0x10:
     case 0x11:
     case 0x12:
     case 0x13:
-      // Call Function corresponding to Sound Registers
+      // The DMC IRQ timer runs whether or not the sound is muted
+      ApuDmcIrqWrite(wAddr, byData);
       if (!APU_Mute)
         pAPUSoundRegs[wAddr & 0x1f](wAddr, byData);
       break;
@@ -495,6 +501,7 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       break;
 
     case 0x15: /* 0x4015 */
+      ApuDmcIrqWrite4015(byData);
       InfoNES_pAPUWriteControl(wAddr, byData);
 #if 0
           /* Unknown */

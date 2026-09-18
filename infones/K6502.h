@@ -9,6 +9,8 @@
 #ifndef K6502_H_INCLUDED
 #define K6502_H_INCLUDED
 
+#include <stdint.h>
+
 // Type definition
 #ifndef DWORD
 typedef unsigned long DWORD;
@@ -83,5 +85,11 @@ extern WORD PC;
 // The number of the clocks that it passed
 //extern WORD g_wPassedClocks;
 WORD getPassedClocks();
+
+// Absolute CPU cycle (g_wCurrentClocks units), also valid inside an instruction
+uint32_t K6502_Now();
+
+// End the running K6502_Step slice on this cycle (the DMC IRQ)
+void K6502_BreakAt(bool enable, uint32_t cycle);
 
 #endif /* !K6502_H_INCLUDED */
