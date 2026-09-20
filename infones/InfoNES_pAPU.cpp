@@ -620,7 +620,7 @@ DWORD *ApuNoiseFreq = ApuNoiseFreqNtsc;
 static DWORD __not_in_flash_func(ApuDpcmCyclesNtsc)[16] =
     {
         428, 380, 340, 320, 286, 254, 226, 214,
-        190, 160, 142, 128, 106, 85, 72, 54};
+        190, 160, 142, 128, 106, 84, 72, 54};
 
 static DWORD __not_in_flash_func(ApuDpcmCyclesPal)[16] =
     {
@@ -629,6 +629,224 @@ static DWORD __not_in_flash_func(ApuDpcmCyclesPal)[16] =
 
 /* Active DMC period table; selected by region in InfoNES_pAPUInit(). */
 DWORD *ApuDpcmCycles = ApuDpcmCyclesNtsc;
+
+/*===================================================================*/
+/*                                                                   */
+/*      DMC IRQ timing                                               */
+/*                                                                   */
+/*===================================================================*/
+
+/* The DMC sound generator (ApuWriteWave5) runs per HSync from the event
+   queue, and not at all while muted, so it cannot say on which CPU cycle a
+   sample ends. Games that use the DMC IRQ as a timer need that cycle: Over
+   Obj busy-waits in its NMI for the IRQ of a 1-byte sample and uses the count
+   to place a mid-frame OAM swap; Firehawk and Wonderland Dizzy split the
+   screen with it. This follows Mesen2's DeltaModulationChannel and is only
+   evaluated on DMC register access and when K6502_BreakAt() fires. */
+
+ApuDmcIrq_t ApuDmcIrq;
+
+/* Wrap-safe "cycle t has been reached by now" */
+static inline bool dmcReached(uint32_t t, uint32_t now)
+{
+  return (int32_t)(now - t) >= 0;
+}
+
+/* The memory reader fills an empty sample buffer. Fetching the last byte
+   raises the IRQ, unless the sample loops. */
+static void dmcFetch()
+{
+  ApuDmcIrq_t &d = ApuDmcIrq;
+  if (d.bufferFull || !d.bytes)
+    return;
+  d.bufferFull = 1;
+  if (--d.bytes)
+    return;
+  if (d.loop)
+    d.bytes = d.length;
+  else if (d.irqEnable && !d.irqFlag)
+  {
+    d.irqFlag = 1;
+    d.ownsIrqLine = (IRQ_State == IRQ_Wiring);
+    IRQ_REQ;
+  }
+}
+
+static void dmcClearIrq()
+{
+  ApuDmcIrq_t &d = ApuDmcIrq;
+  if (!d.irqFlag)
+    return;
+  d.irqFlag = 0;
+  // The core has a single IRQ line. Release it only if the DMC pulled it and
+  // no frame IRQ is pending.
+  if (d.ownsIrqLine && !(APU_Reg[0x15] & 0x40))
+    IRQ_State = IRQ_Wiring;
+  d.ownsIrqLine = 0;
+}
+
+/* Run the output timer up to cycle now */
+static void dmcAdvance(uint32_t now)
+{
+  ApuDmcIrq_t &d = ApuDmcIrq;
+  for (;;)
+  {
+    // The fetch after a $4015 restart goes before a tick on the same cycle
+    if (d.startPending && dmcReached(d.startAt, now) && dmcReached(d.startAt, d.nextTick))
+    {
+      d.startPending = 0;
+      dmcFetch();
+      continue;
+    }
+    if (!dmcReached(d.nextTick, now))
+      return;
+
+    if (!d.startPending)
+    {
+      if (!d.bufferFull)
+      {
+        // Silent and nothing to fetch: only the bit counter moves
+        uint32_t ticks = (now - d.nextTick) / d.period + 1;
+        d.nextTick += ticks * d.period;
+        d.bits = (d.bits + 7 - ticks % 8) % 8 + 1;
+        return;
+      }
+      // Playing: every output cycle moves the buffer out and fetches the next
+      // byte. Skip whole cycles, stopping short of the last byte so that its
+      // IRQ or loop reload goes through dmcFetch().
+      uint32_t boundary = d.nextTick + (d.bits - 1) * d.period;
+      if (d.bytes > 1 && dmcReached(boundary, now))
+      {
+        uint32_t cycles = (now - boundary) / (8u * d.period) + 1;
+        if (cycles > (uint32_t)d.bytes - 1)
+          cycles = d.bytes - 1;
+        d.nextTick = boundary + (cycles - 1) * 8u * d.period + d.period;
+        d.bits = 8;
+        d.bytes -= cycles;
+        continue;
+      }
+    }
+
+    d.nextTick += d.period;
+    if (--d.bits == 0)
+    {
+      d.bits = 8;
+      if (d.bufferFull)
+      {
+        d.bufferFull = 0; // the byte moves to the shift register
+        if (!d.startPending)
+          dmcFetch();
+      }
+    }
+  }
+}
+
+/* The cycle on which the current sample raises the IRQ, if it will */
+static bool dmcIrqCycle(uint32_t &cycle)
+{
+  const ApuDmcIrq_t &d = ApuDmcIrq;
+  if (!d.irqEnable || d.loop || d.irqFlag || !d.bytes)
+    return false;
+  uint32_t outputCycle = 8u * d.period;
+  uint32_t boundary = d.nextTick + (d.bits - 1) * d.period;
+  uint32_t bytes = d.bytes;
+  bool full = d.bufferFull;
+  if (d.startPending)
+  {
+    // A boundary before the delayed fetch empties the buffer without fetching
+    if (!dmcReached(d.startAt, boundary))
+    {
+      full = false;
+      boundary += outputCycle;
+    }
+    if (!full)
+    {
+      if (bytes == 1)
+      {
+        cycle = d.startAt;
+        return true;
+      }
+      bytes--;
+    }
+  }
+  else if (!full)
+    return false; // unreachable: an empty buffer with bytes left is always pending
+  cycle = boundary + (bytes - 1) * outputCycle;
+  return true;
+}
+
+void ApuDmcIrqRearm(void)
+{
+  uint32_t cycle = 0;
+  bool due = dmcIrqCycle(cycle);
+  K6502_BreakAt(due, cycle);
+}
+
+void ApuDmcIrqReset(void)
+{
+  ApuDmcIrq_t &d = ApuDmcIrq;
+  InfoNES_MemorySet(&d, 0, sizeof d);
+  // Power-on state as in Mesen2: slowest rate, 1-byte sample
+  d.period = ApuDpcmCycles[0];
+  d.nextTick = K6502_Now() + d.period;
+  d.length = 1;
+  d.bits = 8;
+  K6502_BreakAt(false, 0);
+}
+
+void ApuDmcIrqWrite(WORD addr, BYTE value)
+{
+  ApuDmcIrq_t &d = ApuDmcIrq;
+  if (addr != 0x4010 && addr != 0x4013)
+    return;
+  dmcAdvance(K6502_Now());
+  if (addr == 0x4010)
+  {
+    d.irqEnable = value & 0x80;
+    d.loop = value & 0x40;
+    d.period = ApuDpcmCycles[value & 0x0F];
+    if (!d.irqEnable)
+      dmcClearIrq();
+  }
+  else
+  {
+    d.length = (value << 4) + 1;
+  }
+  ApuDmcIrqRearm();
+}
+
+void ApuDmcIrqWrite4015(BYTE value)
+{
+  ApuDmcIrq_t &d = ApuDmcIrq;
+  uint32_t now = K6502_Now();
+  dmcAdvance(now);
+  dmcClearIrq();
+  if (!(value & 0x10))
+  {
+    d.bytes = 0;
+    d.startPending = 0;
+  }
+  else if (!d.bytes)
+  {
+    // Restart; the first byte is fetched 2 cycles later
+    d.bytes = d.length;
+    d.startAt = now + 2;
+    d.startPending = 1;
+  }
+  ApuDmcIrqRearm();
+}
+
+BYTE ApuDmcIrqStatus(void)
+{
+  dmcAdvance(K6502_Now());
+  return (ApuDmcIrq.irqFlag ? 0x80 : 0) | (ApuDmcIrq.bytes ? 0x10 : 0);
+}
+
+void ApuDmcIrqBreak(void)
+{
+  dmcAdvance(K6502_Now());
+  ApuDmcIrqRearm();
+}
 
 /*===================================================================*/
 /*                                                                   */

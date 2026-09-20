@@ -203,6 +203,7 @@ __attribute__((weak)) int pAPU_Load(const void *blob, size_t size)
 #define SAVESTATE_FLAG_REGION_SHIFT 1
 #define SAVESTATE_FLAG_REGION_MASK  (0x3u << SAVESTATE_FLAG_REGION_SHIFT)
 #define SAVESTATE_FLAG_MAPPER_PRG_RAM 0x08 // MapperPrgRam follows the name table RAM
+#define SAVESTATE_FLAG_DMC_IRQ      0x10 // ApuDmcIrq follows the APU blob
 // Backwards compatibility: the old "PAL flag" was just bit 1, which now reads
 // as INFONES_REGION_PAL=1 in the 2-bit region field. NTSC=0 (no flag) and
 // Dendy=2 fit in bits 1..2 without colliding with old saves.
@@ -405,6 +406,7 @@ int Emulator_SaveState(const char *path)
   hdr.flags |= ((uint32_t)InfoNES_GetRegion() << SAVESTATE_FLAG_REGION_SHIFT)
                & SAVESTATE_FLAG_REGION_MASK;
   if (MapperPrgRam) hdr.flags |= SAVESTATE_FLAG_MAPPER_PRG_RAM;
+  hdr.flags |= SAVESTATE_FLAG_DMC_IRQ;
 
   struct SaveCore *coreDyn;
   coreDyn = (struct SaveCore *)Frens::f_malloc(sizeof(SaveCore));
@@ -653,6 +655,13 @@ int Emulator_SaveState(const char *path)
     if (mapperBlob) Frens::f_free(mapperBlob);
     return -1;
   }
+  if (!w(&ApuDmcIrq, sizeof ApuDmcIrq))
+  {
+    f_close(&fp);
+    printf("SaveState: failed to write DMC IRQ state\n");
+    if (mapperBlob) Frens::f_free(mapperBlob);
+    return -1;
+  }
   if (mapperBlob) Frens::f_free(mapperBlob);
   f_close(&fp);
   return 0;
@@ -839,6 +848,18 @@ int Emulator_LoadState(const char *path)
     }
   }
 
+  // DMC IRQ timing. States saved before it existed restart it idle.
+  ApuDmcIrq_t dmcIrq;
+  bool haveDmcIrq = (hdr.flags & SAVESTATE_FLAG_DMC_IRQ) != 0;
+  if (haveDmcIrq && !r(&dmcIrq, sizeof dmcIrq))
+  {
+    f_close(&fp);
+    printf("LoadState: failed to read DMC IRQ state\n");
+    Frens::f_free(coreDyn);
+    if (mapperBuf) Frens::f_free(mapperBuf);
+    return -1;
+  }
+
   f_close(&fp);
 
   // CPU restore
@@ -976,6 +997,14 @@ int Emulator_LoadState(const char *path)
     printf("LoadState: failed to load APU state\n");  
     return -1;
   }
+  // After the cycle counter is restored: the saved cycles are relative to it
+  if (haveDmcIrq)
+  {
+    ApuDmcIrq = dmcIrq;
+    ApuDmcIrqRearm();
+  }
+  else
+    ApuDmcIrqReset();
   // Restore mapper state from blob
   if (mapperSize && MapperLoadBlob  ) {
     printf("LoadState: calling MapperLoadBlob\n");

@@ -351,6 +351,7 @@ int main(int argc, char **argv)
     cfg.fds_disk_side  = get_env_int("NES_FDS_DISK_SIDE", -1);
     cfg.save_state     = get_env_int("NES_SAVE_STATE",   -1);
     cfg.load_state     = get_env_int("NES_LOAD_STATE",   -1);
+    settings.flags.removeSpriteLimit = get_env_int("NES_NO_SPRITE_LIMIT", 0);
     {
         const char *p = getenv("NES_STATE_PATH");
         cfg.state_path = p ? p : (cfg.outdir + "/host.state");

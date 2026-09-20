@@ -9,6 +9,8 @@
 #ifndef InfoNES_PAPU_H_INCLUDED
 #define InfoNES_PAPU_H_INCLUDED
 
+#include <stdint.h>
+
 /*-------------------------------------------------------------------*/
 /*  Macros                                                           */
 /*-------------------------------------------------------------------*/
@@ -203,6 +205,36 @@ void InfoNES_pAPUInit(void);
 void InfoNES_pAPUDone(void);
 void InfoNES_pAPUVsync(void);
 void InfoNES_pAPUHsync(bool enabled);
+
+/*-------------------------------------------------------------------*/
+/*  DMC IRQ timing                                                   */
+/*-------------------------------------------------------------------*/
+/* When a DMC sample ends, to the CPU cycle, so the DMC IRQ can be raised.
+   Cycles are K6502_Now() values. Saved in save states as is. */
+struct ApuDmcIrq_t
+{
+  uint32_t nextTick;   /* cycle of the next output timer tick */
+  uint32_t startAt;    /* cycle of the first fetch after a $4015 restart */
+  uint16_t period;     /* cycles per timer tick ($4010 rate) */
+  uint16_t length;     /* sample length in bytes ($4013) */
+  uint16_t bytes;      /* bytes still to fetch */
+  uint8_t bits;        /* ticks left in the 8-bit output cycle */
+  uint8_t bufferFull;  /* sample buffer holds a byte */
+  uint8_t startPending;
+  uint8_t irqEnable;
+  uint8_t loop;
+  uint8_t irqFlag;
+  uint8_t ownsIrqLine; /* IRQ_State was asserted by the DMC */
+  uint8_t reserved[3];
+};
+extern ApuDmcIrq_t ApuDmcIrq;
+
+void ApuDmcIrqReset(void);
+void ApuDmcIrqRearm(void);
+void ApuDmcIrqWrite(WORD addr, BYTE value); /* $4010-$4013 */
+void ApuDmcIrqWrite4015(BYTE value);
+BYTE ApuDmcIrqStatus(void); /* $4015 read: bits 7 and 4 */
+void ApuDmcIrqBreak(void);  /* the CPU reached K6502_BreakAt() */
 
 /*-------------------------------------------------------------------*/
 /*  pAPU Quality resources                                           */

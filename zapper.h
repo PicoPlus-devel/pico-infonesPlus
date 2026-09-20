@@ -60,9 +60,6 @@
 #define ZAPPER_BIT_LIGHT 0x08u   /* 0 = light detected  */
 #define ZAPPER_BIT_TRIGGER 0x10u /* 1 = half-pulled     */
 #define ZAPPER_BITS_MASK (ZAPPER_BIT_LIGHT | ZAPPER_BIT_TRIGGER)
-/* Idle: no light, trigger not half-pulled. Also what an empty port or a plain
-   NES/SNES pad (which leaves D3/D4 unconnected) reads with the pull-ups on. */
-#define ZAPPER_BITS_IDLE ZAPPER_BITS_MASK
 
 /* Line polarity.
    The light line needs inverting on this hardware and the trigger line does not.
@@ -80,6 +77,11 @@
 #ifndef ZAPPER_INVERT_D4
 #define ZAPPER_INVERT_D4 0
 #endif
+/* What an empty port, or a plain NES/SNES pad (which leaves D3/D4
+   unconnected), reads: both pins held high by the pull-ups, then inverted as
+   configured above. With the default light-line inversion that is 0x10. */
+#define ZAPPER_BITS_IDLE ((ZAPPER_INVERT_D3 ? 0u : ZAPPER_BIT_LIGHT) | \
+                          (ZAPPER_INVERT_D4 ? 0u : ZAPPER_BIT_TRIGGER))
 /* Diagnostics. A bit mask, because both kinds interfere with light-gun
    detection and sometimes only one of them can be tolerated:
      1  UART trace, one line per second. The line is ~130 characters, which at

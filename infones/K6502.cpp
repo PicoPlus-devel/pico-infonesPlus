@@ -14,6 +14,7 @@
 #include "InfoNES_System.h"
 #include "InfoNES.h"
 #include "InfoNES_FDS.h"
+#include "InfoNES_pAPU.h"
 
 #include <stdio.h>
 #include <pico.h>
@@ -371,6 +372,48 @@ WORD getPassedClocks()
   return g_wCurrentClocks;
 }
 
+/* A slice is one step() call. K6502_BreakAt() ends the running slice on an
+   exact cycle without adding a test to step()'s instruction loop: it biases
+   g_wPassedClocks so that the loop's own bound is reached on that cycle. The
+   DMC IRQ uses it; everything else pays a few stores per slice. */
+static int SliceStart; // g_wPassedClocks when the running slice began
+static int SliceLimit; // the slice's wClocks
+static int SliceBias;  // clocks added to g_wPassedClocks to end it early
+static bool InSlice;
+static bool BreakArmed;
+static uint32_t BreakCycle;
+
+uint32_t K6502_Now()
+{
+  if (!InSlice)
+    return (uint32_t)g_wCurrentClocks;
+  return (uint32_t)g_wCurrentClocks + (uint32_t)(g_wPassedClocks - SliceBias - SliceStart);
+}
+
+static inline void applyBreak()
+{
+  int bias = 0;
+  if (BreakArmed)
+  {
+    int passed = g_wPassedClocks - SliceBias;
+    int at = (int)(BreakCycle - (uint32_t)g_wCurrentClocks) + SliceStart;
+    if (at < passed)
+      at = passed; // due already: stop after the current instruction
+    if (at < SliceLimit)
+      bias = SliceLimit - at;
+  }
+  g_wPassedClocks += bias - SliceBias;
+  SliceBias = bias;
+}
+
+void K6502_BreakAt(bool enable, uint32_t cycle)
+{
+  BreakArmed = enable;
+  BreakCycle = cycle;
+  if (InSlice)
+    applyBreak();
+}
+
 // A table for the test
 BYTE g_byTestTable[256];
 
@@ -555,6 +598,8 @@ static void __not_in_flash_func(procNMI)()
     // NMI Interrupt
     NMI_State = NMI_Wiring;
     CLK(7);
+    // step() does not count these, the DMC IRQ timing needs them
+    g_wCurrentClocks += 7;
 
     PUSHW(PC);
     PUSH(F & ~FLAG_B);
@@ -584,6 +629,7 @@ static void __not_in_flash_func(procNMI)()
       // cycle accounting to the IRQ boundary.
       g_wPassedClocks = 0;
       CLK(7);
+      g_wCurrentClocks += 7;
 
       PUSHW(PC);
       PUSH(F & ~FLAG_B);
@@ -1820,16 +1866,53 @@ static void __not_in_flash_func(step)(int wClocks)
 /*          Only the specified number of the clocks execute Op.      */
 /*                                                                   */
 /*===================================================================*/
+/* step() split at the K6502_BreakAt() cycle. There the DMC model raises its
+   IRQ, which is taken on that cycle rather than at the next slice, and the
+   rest of the slice runs after it. */
+static void __not_in_flash_func(stepSliced)(int wClocks)
+{
+  for (;;)
+  {
+    SliceStart = g_wPassedClocks;
+    SliceLimit = wClocks;
+    SliceBias = 0;
+    InSlice = true;
+    if (BreakArmed)
+      applyBreak();
+    int entryBias = SliceBias; // step() starts counting from here
+    step(wClocks);
+    InSlice = false;
+    if (!SliceBias)
+      return;
+
+    // step() counted a bias added while it ran as executed clocks
+    g_wPassedClocks -= SliceBias;
+    g_wCurrentClocks -= SliceBias - entryBias;
+    SliceBias = 0;
+    ApuDmcIrqBreak();
+
+    // procNMI() drops the clocks this slice still owes, so put them back. A
+    // pending NMI keeps waiting for the next K6502_Step, as it always did.
+    if (NMI_State == NMI_Wiring && IRQ_State != IRQ_Wiring && !(F & FLAG_I))
+    {
+      int owed = g_wPassedClocks;
+      procNMI();
+      g_wPassedClocks = owed + 7;
+    }
+    wClocks = 0;
+  }
+}
+
 void __not_in_flash_func(K6502_Step)(int wClocks)
 {
   if (NMI_State != NMI_Wiring)
   {
     // NMI前に少し実行したい
-    step(7);
+    stepSliced(7);
     wClocks -= 7;
   }
   procNMI();
-  step(wClocks);
+  stepSliced(wClocks);
 }
 
 // Addressing Op.
