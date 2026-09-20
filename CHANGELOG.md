@@ -3,7 +3,7 @@
 Fix for *Arkanoid* on the custom PCB and the Adafruit breadboard setup: the paddle was stuck on the right side of the screen.
 The 8-sprites-per-line limit from v0.50 can now be turned off in the settings menu.
 Fix for a red screen on RP2040 boards when the same MMC5 game is started twice.
-*Over Obj* and *Firehawk* now run.
+*Over Obj*.
 
 # General Info
 
@@ -32,8 +32,8 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 ## Fixes
 
 - *Arkanoid* on the custom PCB and the Adafruit breadboard setup (the `piconesPlus_AdafruitDVISD_*` binaries): the paddle was stuck on the right side of the screen and ignored the D-pad. Since v0.46 the emulator thought a Zapper was plugged into port 2, even when the port was empty or had a normal controller in it ([#234](https://github.com/fhoedemakers/pico-infonesPlus/issues/234)). Thanks to [PetersonL-tech](https://github.com/PetersonL-tech).
-- RP2040 boards: starting the same MMC5 game (*Castlevania III*, *Just Breed*, ...) a second time froze on a red screen until the power was cycled. The board ran out of memory ([#242](https://github.com/fhoedemakers/pico-infonesPlus/issues/242)). Thanks to [chubunov](https://github.com/chubunov).
-- Games that use the sound chip's sample channel as a timer now work: *Over Obj* no longer shows a black screen, and the *Firehawk* intro no longer freezes.
+- RP2040 boards: starting a MMC5 game (*Castlevania III*, *Just Breed*, ...) which was already in flash caused an out of memory panic. ([#242](https://github.com/fhoedemakers/pico-infonesPlus/issues/242)). Thanks to [chubunov](https://github.com/chubunov).
+- Games that use the sound chip's sample channel as a timer now work: *Over Obj* no longer shows a black screen.
 
 ## Known issues
 
