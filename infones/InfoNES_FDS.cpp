@@ -26,6 +26,15 @@ extern unsigned int ApuCyclesPerSample;
 #include "K6502.h"
 #include "settings.h"
 
+/* FDS only runs on RP2350. The RP2040 build still links the audio path
+   (InfoNES_pAPU calls it behind ApuFdsEnable), so keep it in flash there
+   instead of spending RAM on code that never executes. */
+#if PICO_RP2350
+#define FDS_RAMFUNC(f) __not_in_flash_func(f)
+#else
+#define FDS_RAMFUNC(f) f
+#endif
+
 /*-------------------------------------------------------------------*/
 /*  FDS state                                                        */
 /*-------------------------------------------------------------------*/
@@ -271,7 +280,7 @@ BYTE *fds_wave_buffer = nullptr;
 /*-------------------------------------------------------------------*/
 /*  FDS audio envelope tick helper (shared by volume + mod channels) */
 /*-------------------------------------------------------------------*/
-static inline bool __not_in_flash_func(fdsTickEnvelope)(BYTE speed, BYTE env_off,
+static inline bool FDS_RAMFUNC(fdsTickEnvelope)(BYTE speed, BYTE env_off,
                                    BYTE increase, BYTE *gain,
                                    DWORD *timer)
 {
@@ -298,7 +307,7 @@ static inline bool __not_in_flash_func(fdsTickEnvelope)(BYTE speed, BYTE env_off
 /*-------------------------------------------------------------------*/
 /*  FDS modulation output calculation (Mesen2 algorithm).            */
 /*-------------------------------------------------------------------*/
-static void __not_in_flash_func(fdsUpdateModOutput)(WORD volumePitch)
+static void FDS_RAMFUNC(fdsUpdateModOutput)(WORD volumePitch)
 {
   /* Mesen2 "ModChannel::UpdateOutput" — NesDev wiki algorithm.
      counter = $4085 signed 7-bit, gain = $4084 6-bit unsigned. */
@@ -326,7 +335,7 @@ static void __not_in_flash_func(fdsUpdateModOutput)(WORD volumePitch)
 /*-------------------------------------------------------------------*/
 /*  FDS modulation counter update (Mesen2 ModChannel::UpdateCounter) */
 /*-------------------------------------------------------------------*/
-static inline void __not_in_flash_func(fdsUpdateModCounter)(int8_t value)
+static inline void FDS_RAMFUNC(fdsUpdateModCounter)(int8_t value)
 {
   fds_mod_counter = value;
   if (fds_mod_counter >= 64)
@@ -341,7 +350,7 @@ static inline void __not_in_flash_func(fdsUpdateModCounter)(int8_t value)
 static const int __not_in_flash("fds_audio") fds_mod_lut[8] = {0, 1, 2, 4, 0x7F, -4, -2, -1};
 #define FDS_MOD_RESET 0x7F
 
-static inline bool __not_in_flash_func(fdsTickModulator)()
+static inline bool FDS_RAMFUNC(fdsTickModulator)()
 {
   if (!fds_mod_disabled && fds_mod_frequency > 0)
   {
@@ -1639,7 +1648,7 @@ BYTE fdsApuRead(WORD wAddr)
 /*    output = (waveTable[pos] * gain * volTable[masterVol]) / 1152  */
 /*  giving a 0..63 range that's then mixed via wave6 (×18 in mixer). */
 /*-------------------------------------------------------------------*/
-void __not_in_flash_func(fdsRenderAudio)(unsigned int n)
+void FDS_RAMFUNC(fdsRenderAudio)(unsigned int n)
 {
   if (!fds_wave_buffer) return;
 

@@ -19,11 +19,11 @@
 /*  NES resources                                                    */
 /*-------------------------------------------------------------------*/
 
-#define RAM_SIZE 0x2000
+// $0000-$1FFF is 2KB of RAM mirrored four times; every access masks with 0x7ff.
+#define RAM_SIZE 0x800
 #define SRAM_SIZE 0x2000
 #define PPURAM_SIZE 0x4000
 #define SPRRAM_SIZE 256
-#define CHRBUF_SIZE 256 * 2 * 8 * 8
 
 /* RAM */
 extern BYTE *RAM;
@@ -214,12 +214,6 @@ extern BYTE PPU_ScanTable[];
 /* Name Table Bank */
 extern BYTE PPU_NameTableBank;
 
-/* BG Base Address */
-extern BYTE *PPU_BG_Base;
-
-/* Sprite Base Address */
-extern BYTE *PPU_SP_Base;
-
 /* Sprite Height */
 extern WORD PPU_SP_Height;
 
@@ -250,11 +244,6 @@ extern WORD WorkFrameIdx;
 #else
 // FHextern WORD WorkFrame[NES_DISP_WIDTH * NES_DISP_HEIGHT];
 #endif
-
-extern BYTE *ChrBuf;
-
-
-extern BYTE ChrBufUpdate;
 
 extern WORD PalTable[];
 

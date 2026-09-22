@@ -1589,6 +1589,7 @@ bool loadAndReset()
     {
         return false;
     }
+    Frens::dumpHeapStats("game start"); // peak usage: every core and mapper buffer is allocated now
     return true;
 }
 

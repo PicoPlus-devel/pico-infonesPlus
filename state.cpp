@@ -48,7 +48,6 @@ extern BYTE *RAM;         // 2KB internal RAM
 extern BYTE *SRAM;        // Battery-backed (mapper dependent)
 extern BYTE *PPURAM;      // PPU address space for CHR RAM + name tables + palette
 extern BYTE *SPRRAM;      // Sprite (OAM) memory
-extern BYTE *ChrBuf;      // Decoded pattern cache (implementation‑specific)
 extern BYTE *PPUBANK[16]; // 16 x 1KB PPU bank pointers
 extern BYTE *ROM;         // PRG ROM base
 extern BYTE *ROMBANK[4];  // 4 x 8KB PRG bank pointers (typically 16KB/32KB mapped)
@@ -67,8 +66,6 @@ extern WORD PPU_Temp;          // Temp VRAM address (loopy register scratch)
 extern WORD PPU_Increment;     // VRAM increment (1 or 32)
 extern WORD PPU_Scanline;      // Current scanline
 extern BYTE PPU_NameTableBank; // Base nametable bank index
-extern BYTE *PPU_BG_Base;      // Pointer to background pattern table (decoded)
-extern BYTE *PPU_SP_Base;      // Pointer to sprite pattern table (decoded)
 extern WORD PPU_SP_Height;     // Sprite height (8 or 16)
 extern int SpriteJustHit;      // Sprite zero hit latch
 extern BYTE byVramWriteEnable; // 1 if CHR RAM writable
@@ -80,7 +77,6 @@ extern WORD FrameStep;         // Frame step counter
 // Frame / rendering stats
 extern WORD FrameSkip;
 extern WORD FrameCnt;
-extern BYTE ChrBufUpdate; // Pattern cache update flag
 extern WORD PalTable[32]; // Current palette (decoded to internal format)
 
 // APU registers
@@ -199,6 +195,10 @@ __attribute__((weak)) int pAPU_Load(const void *blob, size_t size)
 
 /* -------- File format structures -------- */
 #define SAVESTATEFILE_VERSION 1
+// The file holds the whole $0000-$1FFF CPU window, as it did when RAM was
+// allocated at that size; only the first RAM_SIZE bytes are real RAM.
+#define RAM_STATE_SIZE 0x2000
+static_assert(RAM_STATE_SIZE % RAM_SIZE == 0, "RAM mirrors must tile the state window");
 #define SAVESTATE_FLAG_CHR_RAM      0x01
 #define SAVESTATE_FLAG_REGION_SHIFT 1
 #define SAVESTATE_FLAG_REGION_MASK  (0x3u << SAVESTATE_FLAG_REGION_SHIFT)
@@ -249,7 +249,7 @@ struct SaveCore
   // Timing / misc
   WORD FrameSkip;
   WORD FrameCnt;
-  BYTE ChrBufUpdate;
+  BYTE reserved1; // Was the ChrBuf update flag; kept so the file layout does not change
   BYTE byVramWriteEnable;
   BYTE ROM_Mirroring;
   BYTE reserved0; // Padding/alignment
@@ -383,17 +383,6 @@ static void restorePRGBanks(const SaveCore &c)
     ROMBANK[i] = ROM + c.prgBankIndex[i] * 0x2000;
 }
 
-// Recompute pattern table base pointers from PPU_R0 and request pattern cache refresh
-static void recalcPatternBases()
-{
-  BYTE *base0 = ChrBuf;            // decoded tiles for pattern table 0 ($0000)
-  BYTE *base1 = ChrBuf + 256 * 64; // decoded tiles for pattern table 1 ($1000)
-  PPU_BG_Base = (PPU_R0 & 0x10) ? base1 : base0;
-  PPU_SP_Base = (PPU_R0 & 0x08) ? base1 : base0;
-  // Force tile decode refresh on next render path
-  ChrBufUpdate = 1;
-}
-
 /* -------- Public API: Save -------- */
 int Emulator_SaveState(const char *path)
 {
@@ -456,7 +445,7 @@ int Emulator_SaveState(const char *path)
   // Misc/frame
   core.FrameSkip = FrameSkip;
   core.FrameCnt = FrameCnt;
-  core.ChrBufUpdate = ChrBufUpdate;
+  core.reserved1 = 0;
   core.byVramWriteEnable = byVramWriteEnable;
   core.ROM_Mirroring = ROM_Mirroring;
   memcpy(core.PalTable, PalTable, sizeof core.PalTable);
@@ -570,11 +559,19 @@ int Emulator_SaveState(const char *path)
     UINT bw;
     return f_write(&fp, buf, len, &bw) == FR_OK && bw == len;
   };
+  // RAM followed by its mirrors, filling the RAM_STATE_SIZE window.
+  auto wRam = [&]() -> bool
+  {
+    for (UINT ofs = 0; ofs < RAM_STATE_SIZE; ofs += RAM_SIZE)
+      if (!w(RAM, RAM_SIZE))
+        return false;
+    return true;
+  };
 
   // Serialize header + core struct + primary RAM regions
   if (!w(&hdr, sizeof hdr) ||
       !w(&core, sizeof core) ||
-      !w(RAM, RAM_SIZE) ||
+      !wRam() ||
       !w(SPRRAM, SPRRAM_SIZE) ||
       !w(SRAM, SRAM_SIZE))
   {
@@ -724,8 +721,13 @@ int Emulator_LoadState(const char *path)
     return -1;
   }
   SaveCore &core = *coreDyn;
+  // The mirror bytes after RAM are skipped by reading them into PPURAM, which
+  // is read in full from the file right after this block, so no extra buffer
+  // is needed.
+  static_assert(RAM_STATE_SIZE - RAM_SIZE <= PPURAM_SIZE, "RAM mirror skip must fit in PPURAM");
   if (!r(&core, sizeof core) ||
       !r(RAM, RAM_SIZE) ||
+      !r(PPURAM, RAM_STATE_SIZE - RAM_SIZE) ||
       !r(SPRRAM, SPRRAM_SIZE) ||
       !r(SRAM, SRAM_SIZE))
   {
@@ -985,8 +987,6 @@ int Emulator_LoadState(const char *path)
   // it will not put it back itself.
   InfoNES_Mirroring(ROM_FourScr ? 4 : ROM_Mirroring);
 
-  // Update pattern table base pointers & schedule decode refresh
-  recalcPatternBases();
   Frens::f_free(coreDyn);
   // Mapper / APU custom state restore
   // if (Mapper_Load(mapperBuf.get(), mapperSize) < 0) {

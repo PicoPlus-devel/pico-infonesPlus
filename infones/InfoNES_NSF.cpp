@@ -284,23 +284,22 @@ static void NsfApplyAllBanks()
 
 #if !PICO_RP2350
     /* RP2040: ROMBANK[] *is* the NSF read path - K6502_Read has no NSF
-       special case there. Fall back to ChrBuf if the 32KB window could
-       not be allocated, so stray reads still land in mapped memory. */
-    BYTE *base = NsfWindow ? NsfWindow : ChrBuf;
-    ROMBANK0 = base + 0x0000;
-    ROMBANK1 = base + 0x2000;
-    ROMBANK2 = base + 0x4000;
-    ROMBANK3 = base + 0x6000;
+       special case there. NsfBuildShadows allocated the 32KB window;
+       f_malloc panics rather than return NULL, so it is always there. */
+    ROMBANK0 = NsfWindow + 0x0000;
+    ROMBANK1 = NsfWindow + 0x2000;
+    ROMBANK2 = NsfWindow + 0x4000;
+    ROMBANK3 = NsfWindow + 0x6000;
     NsfPatchVectors();
 #else
     /* ROMBANK[] is unused in NSF mode (K6502_Read goes via NsfBank4K),
-       but point it at ChrBuf anyway so any stray access from sprite-DMA
-       paths or leftover mapper code lands in addressable memory rather
-       than nullptr. */
-    ROMBANK0 = ChrBuf + 0x0000;
-    ROMBANK1 = ChrBuf + 0x2000;
-    ROMBANK2 = ChrBuf + 0x4000;
-    ROMBANK3 = ChrBuf + 0x6000;
+       but point every bank at the 8KB SRAM anyway so any stray access from
+       sprite-DMA paths or leftover mapper code lands in addressable memory
+       rather than nullptr. */
+    ROMBANK0 = SRAM;
+    ROMBANK1 = SRAM;
+    ROMBANK2 = SRAM;
+    ROMBANK3 = SRAM;
 #endif
 }
 

@@ -4,7 +4,7 @@
 /*                                                                   */
 /*===================================================================*/
 
-BYTE Map185_Dummy_Chr_Rom[ 0x400 ];
+BYTE *Map185_Dummy_Chr_Rom;
 
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 185                                            */
@@ -47,11 +47,12 @@ void Map185_Init()
   ROMBANK2 = ROMPAGE( 2 );
   ROMBANK3 = ROMPAGE( 3 );
 
-  /* Initialize Dummy VROM */
-  for ( int nPage = 0; nPage < 0x400; nPage++ )
+  /* Initialize Dummy VROM (allocated once; InfoNES_Fin frees it) */
+  if ( !Map185_Dummy_Chr_Rom )
   {
-    Map185_Dummy_Chr_Rom[ nPage ] = 0xff;
+    Map185_Dummy_Chr_Rom = (BYTE *)Frens::f_malloc( 0x400 );
   }
+  InfoNES_MemorySet( Map185_Dummy_Chr_Rom, 0xff, 0x400 );
 
   /* Set up wiring of the interrupt pin */
   K6502_Set_Int_Wiring( 1, 1 ); 

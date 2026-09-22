@@ -81,16 +81,6 @@ BYTE *RAM;
 /* SRAM */
 BYTE *SRAM;
 
-/* Character Buffer */
-BYTE *ChrBuf;
-
-// Share this memory with other components (menu.cpp, romselect.cpp, main.cpp)
-// void *InfoNes_GetChrBuf(size_t *size)
-// {
-//   printf("Acquired ChrBuf Buffer from emulator: %d bytes\n", CHRBUF_SIZE);
-//   *size = CHRBUF_SIZE;
-//   return ChrBuf;
-// }
 /* PPU RAM */
 BYTE *PPURAM;
 // Share this memory with other components (menu.cpp, romselect.cpp, main.cpp)
@@ -179,12 +169,6 @@ WORD PPU_Scanline;
 /* Name Table Bank */
 BYTE PPU_NameTableBank;
 
-/* BG Base Address */
-BYTE *PPU_BG_Base;
-
-/* Sprite Base Address */
-BYTE *PPU_SP_Base;
-
 /* Sprite Height */
 WORD PPU_SP_Height;
 
@@ -227,9 +211,6 @@ void __not_in_flash_func(InfoNES_SetLineBuffer)(WORD *p, WORD size)
   WorkLine = p;
 }
 #endif
-
-/* Update flag for ChrBuf */
-BYTE ChrBufUpdate;
 
 /* Palette Table */
 WORD PalTable[32];
@@ -413,7 +394,6 @@ void InfoNES_Init()
   SRAM = (BYTE *)Frens::f_malloc(SRAM_SIZE);
   PPURAM = (BYTE *)Frens::f_malloc(PPURAM_SIZE);
   SPRRAM = (BYTE *)Frens::f_malloc(SPRRAM_SIZE);
-  ChrBuf = (BYTE *)Frens::f_malloc(CHRBUF_SIZE);
 
   int nIdx;
 
@@ -457,7 +437,6 @@ void InfoNES_Fin()
   Frens::f_free(SRAM);
   Frens::f_free(PPURAM);
   Frens::f_free(SPRRAM);
-  Frens::f_free(ChrBuf);
   if (Map5_Wram) { Frens::f_free(Map5_Wram); Map5_Wram = nullptr; }
   if (Map5_Ex_Vram) { Frens::f_free(Map5_Ex_Vram); Map5_Ex_Vram = nullptr; }
   if (Map5_Ex_Nam) { Frens::f_free(Map5_Ex_Nam); Map5_Ex_Nam = nullptr; }
@@ -468,6 +447,9 @@ void InfoNES_Fin()
   if (Map13_Chr_Ram) { Frens::f_free(Map13_Chr_Ram); Map13_Chr_Ram = nullptr; }
   if (Map96_Chr_Ram) { Frens::f_free(Map96_Chr_Ram); Map96_Chr_Ram = nullptr; }
   if (Map111_Chr_Ram) { Frens::f_free(Map111_Chr_Ram); Map111_Chr_Ram = nullptr; }
+  if (Map19_Chr_Ram) { Frens::f_free(Map19_Chr_Ram); Map19_Chr_Ram = nullptr; }
+  if (Map185_Dummy_Chr_Rom) { Frens::f_free(Map185_Dummy_Chr_Rom); Map185_Dummy_Chr_Rom = nullptr; }
+  if (Map188_Dummy) { Frens::f_free(Map188_Dummy); Map188_Dummy = nullptr; }
   SstFlash_Release();
   MapperChrRam = nullptr; MapperChrRamSize = 0;
   MapperNtRam = nullptr; MapperNtRamSize = 0;
@@ -612,9 +594,6 @@ int InfoNES_Reset()
   WorkFrame = DoubleFrame[ 0 ];
   WorkFrameIdx = 0;
 #endif
-
-  // Reset update flag of ChrBuf
-  ChrBufUpdate = 0xff;
 
   // Reset palette table
   InfoNES_MemorySet(PalTable, 0, sizeof PalTable);
@@ -780,8 +759,6 @@ void InfoNES_SetupPPU()
   // Reset information on PPU_R0
   PPU_Increment = 1;
   PPU_NameTableBank = NAME_TABLE0;
-  PPU_BG_Base = ChrBuf;
-  PPU_SP_Base = ChrBuf + 256 * 64;
   PPU_SP_Height = 8;
 
   // Reset PPU banks
@@ -1412,7 +1389,6 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   WORD *pPoint;
   int nNameTable;
   BYTE *pbyNameTable;
-  BYTE *pbyChrData;
   BYTE *pSPRRAM;
   int nAttr;
   int nSprCnt;
@@ -1478,12 +1454,11 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     //
     const int patternTableIdBG = PPU_R0 & R0_BG_ADDR ? 1 : 0;
     const int bankOfsBG = patternTableIdBG << 2;
-    /* PATTBL() of a background tile fetch reduces to this base OR'd with
-       (tile << 4) - the tile index the renderer has already loaded. Building
-       it that way saves re-reading the name table byte and rebuilding a
-       ChrBuf pointer just to subtract ChrBuf off it again, ~33 times per
-       scanline. Only mappers that actually watch PPU fetches (MMC2/MMC4 CHR
-       latch, mapper 96) pay the call at all - see MapperPPUActive. */
+    /* The pattern table address of a background tile fetch is this base OR'd
+       with (tile << 4) - the tile index the renderer has already loaded, so
+       the name table byte is not read twice, ~33 times per scanline. Only
+       mappers that actually watch PPU fetches (MMC2/MMC4 CHR latch, mapper
+       96) pay the call at all - see MapperPPUActive. */
     const int bgPatBase = (patternTableIdBG << 12) | (yOfsModBG << 1);
 
     /* MMC5 extended attribute mode ($5104 = 1): ExRAM supplies each background
@@ -1499,7 +1474,6 @@ void __not_in_flash_func(InfoNES_DrawLine)()
     /*-------------------------------------------------------------------*/
 
     pbyNameTable = PPUBANK[nNameTable] + nY * 32 + nX;
-    pbyChrData = PPU_BG_Base + (*pbyNameTable << 6) + nYBit;
     pAttrBase = PPUBANK[nNameTable] + 0x3c0 + (nY / 4) * 8;
 #if 0
     pPalTbl = &PalTable[(((pAttrBase[nX >> 2] >> ((nX & 2) + nY4)) & 3) << 2)];

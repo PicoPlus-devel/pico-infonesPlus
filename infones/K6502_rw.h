@@ -294,8 +294,6 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       PPU_R0 = byData;
       PPU_Increment = (PPU_R0 & R0_INC_ADDR) ? 32 : 1;
       PPU_NameTableBank = NAME_TABLE0 + (PPU_R0 & R0_NAME_ADDR);
-      PPU_BG_Base = (PPU_R0 & R0_BG_ADDR) ? ChrBuf + 256 * 64 : ChrBuf;
-      PPU_SP_Base = (PPU_R0 & R0_SP_ADDR) ? ChrBuf + 256 * 64 : ChrBuf;
       // Sprite size and sprite pattern table feed the MMC2/MMC4 sprite-fetch
       // trigger list, so it has to be recomputed.
       SprLatchDirty = true;
@@ -385,7 +383,6 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       if (addr < 0x2000 && byVramWriteEnable)
       {
         // Pattern Data
-        ChrBufUpdate |= (1 << (addr >> 10));
         PPUBANK[addr >> 10][addr & 0x3ff] = byData;
       }
       else if (addr < 0x3f00) /* 0x2000 - 0x3eff */

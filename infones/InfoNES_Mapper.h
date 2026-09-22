@@ -42,8 +42,6 @@ extern BYTE *DRAM;
 #define CRAMPAGE(a) &PPURAM[0x0000 + ((a)&0x1F) * 0x400]
 /* The address of 1Kbytes unit of the VRAM */
 #define VRAMPAGE(a) &PPURAM[0x2000 + (a)*0x400]
-/* Translate the pointer to ChrBuf into the address of Pattern Table */
-#define PATTBL(a) (((a)-ChrBuf) >> 2)
 
 /*-------------------------------------------------------------------*/
 /*  Macros ( Mapper specific )                                       */
@@ -80,6 +78,12 @@ extern BYTE *Map30_Chr_Ram;
 extern BYTE *Map13_Chr_Ram;
 extern BYTE *Map96_Chr_Ram;
 extern BYTE *Map111_Chr_Ram;
+
+/* Small per-mapper buffers, allocated on first init via f_malloc so the
+   other games do not carry them in static RAM. */
+extern BYTE *Map19_Chr_Ram;         /* Namco 163: 8KB CHR RAM */
+extern BYTE *Map185_Dummy_Chr_Rom;  /* CNROM protection: 1KB of 0xFF */
+extern BYTE *Map188_Dummy;          /* Karaoke Studio: 8KB $6000 window */
 
 /*-------------------------------------------------------------------*/
 /*  SST39SF040 flash emulation (mappers 30 and 111)                  */
