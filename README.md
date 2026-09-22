@@ -45,8 +45,6 @@ To enable FDS game support, provide your own BIOS file:
 1. Copy the FDS BIOS file to the `/bios` directory on your SD card
 2. Name the file: `fds-bios.rom`
 
-Note that FDS games can only be played on RP2350.
-
 FDS ROM images will then be available alongside NES ROMs in the menu.
 
 For more info on FDS Game see the [FDS](#famicom-disk-system-fds-games-1) section in this README.
@@ -1175,12 +1173,13 @@ Save States should work for  mapper 0,1,2,3 and 4. Other mappers may or may not 
 FDS games are supported with the following requirements:
 
 - A BIOS file is required. Place it at `/bios/fds-bios.rom` on the SD card. The file must be exactly 8 KB.
-- An RP2350 board. RP2040 does not meet the memory requirements.
 - You need ROMs with the `.fds` extension.
+
+FDS games run on both RP2040 and RP2350 boards.
 
 FDS games have these features:
 
-- For games that can write save data back to disk, you must go back to the menu to save the game. Saves are written to `/SAVES/<gamename>_fds.SAV`. For single-side disk images the file is `/SAVES/<gamename>_fds_s<N>.SAV`, one per side. Save states are not supported for FDS games.
+- For games that can write save data back to disk, you must go back to the menu to save the game. Saves are written to `/SAVES/<gamename>_fds.SAV`. Earlier versions wrote one file per disk side, `/SAVES/<gamename>_fds_s<N>.SAV`, on RP2350 boards without PSRAM. These files are read automatically when no `_fds.SAV` file exists yet. Save states are not supported for FDS games.
   
 ### Swapping Disks
 

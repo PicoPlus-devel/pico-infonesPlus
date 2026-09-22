@@ -7,7 +7,8 @@ flashing, no serial console. Only hardware-specific issues (HSTX/DVI output,
 SD card, PSRAM latency, audio sinks) still need the real device.
 
 The harness builds against the **RP2350 + framebuffer** configuration:
-`PICO_RP2350=1`, `FRAMEBUFFERISPOSSIBLE=1`, `isPsramEnabled()=true`. That
+`PICO_RP2350=1`, `FRAMEBUFFERISPOSSIBLE=1`, `isPsramEnabled()=true`
+(see `NES_NO_PSRAM`). That
 unlocks MMC5, VRC7 CHR-RAM, the Famicom Disk System (FDS), and the
 320×240 full-frame rendering path the device uses on RP2350.
 
@@ -84,6 +85,9 @@ save files (`*.SAV`) are written under `$NES_FAT_ROOT/saves/`.
 | `NES_FRAME_CRC=1` | print `CRC <frame> <crc32>` for every rendered frame |
 | `NES_DUMP_VRAM=1` | write `ppuram.bin` (16 KB) and `sprram.bin` (256 B) to outdir at exit |
 | `NES_FDS_DISK_SIDE=<N>` | (FDS only) call `fdsRequestSwap(N)` once at startup |
+| `NES_FDS_SWAP=<f>:<side>[,...]` | (FDS only) call `fdsRequestSwap(side)` at each frame, like the menu's disk swap |
+| `NES_FDS_SAVE=<path stem>` | (FDS only) load `<stem>.SAV` before the reset and write it back at exit, as the device does; the stem is a FatFs path, e.g. `/saves/game_fds` |
+| `NES_NO_PSRAM=1` | `isPsramEnabled()` returns false, so FDS uses the copy-on-write disk image of boards without PSRAM |
 | `NES_FAT_ROOT=<dir>` | root directory for FatFs paths; default `.` |
 | `NES_SAVE_STATE=<frame>` | call `Emulator_SaveState` at that frame |
 | `NES_LOAD_STATE=<frame>` | call `Emulator_LoadState` at that frame |
@@ -136,7 +140,10 @@ UP+A at frame 200 for 10 frames each.
   `ZAPPER_SUPPORTED` is 0), and `$4017` reads behave exactly as before.
 - NSF files aren't auto-detected (no `.nsf` dispatch in the harness).
 - The harness does NOT load NVRAM; cartridge save RAM starts empty every run.
-- `isPsramEnabled()` always returns true, so FDS multi-side games keep all
-  sides in host RAM (matches the device's PSRAM build behavior).
+- `isPsramEnabled()` returns true unless `NES_NO_PSRAM` is set, so FDS
+  expands every side into host RAM like a PSRAM board. The copy-on-write
+  image must produce the same frame CRCs.
+- Without PSRAM the device checks the free heap before each disk page; the
+  host skips that check, so an out-of-memory drop never happens here.
 - Region detection runs the real MesenDB CRC lookup, so games with PAL/Dendy
   entries pick the right timing automatically; `NES_REGION=…` forces it.

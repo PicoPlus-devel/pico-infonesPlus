@@ -365,9 +365,8 @@ extern BYTE ROM_Trainer;
 extern BYTE ROM_FourScr;
 
 /* True when the loaded image is a Famicom Disk System disk (no iNES header).
-   Set by parseROM in main before InfoNES_Reset. RP2350 only - FDS is
-   compiled out on RP2040, so this is always false there. PSRAM is not
-   required; it only selects multi-side over single-side drive mode. */
+   Set by parseROM in main before InfoNES_Reset. PSRAM is not required; it
+   only selects a fully expanded disk image over the copy-on-write one. */
 extern bool IsFDS;
 
 /* True when the loaded image is an NSF (Nintendo Sound Format) file. */

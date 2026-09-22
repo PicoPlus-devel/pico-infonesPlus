@@ -36,7 +36,8 @@ namespace Frens
     void *f_malloc(size_t n) { return malloc(n); }
     void  f_free(void *p)    { free(p); }
 
-    bool isPsramEnabled()     { return true; }   // FDS multi-side mode
+    // NES_NO_PSRAM=1 runs FDS the way a board without PSRAM does.
+    bool isPsramEnabled()     { return getenv("NES_NO_PSRAM") == nullptr; }
     bool isFrameBufferUsed()  { return true; }
     uint GetAvailableMemory() { return 8u * 1024u * 1024u; }
 

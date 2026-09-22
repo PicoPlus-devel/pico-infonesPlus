@@ -105,6 +105,8 @@ static struct {
     std::string state_path; // file the two above use
     KeyEvent keys[32];
     int keys_n;
+    KeyEvent fds_swaps[8];  // NES_FDS_SWAP: mask holds the side
+    int fds_swaps_n;
 } cfg;
 
 static int      g_frame      = 0;
@@ -165,25 +167,31 @@ static int parse_region(const char *s, int fallback)
     return atoi(s);
 }
 
-static void parse_keys_env()
+static void parse_frame_list(const char *env, KeyEvent *out, int max, int *n)
 {
-    const char *e = getenv("NES_PRESS_KEYS");
+    const char *e = getenv(env);
     if (!e) return;
     char buf[1024];
     strncpy(buf, e, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = 0;
 
     char *tok = strtok(buf, ",");
-    while (tok && cfg.keys_n < 32) {
+    while (tok && *n < max) {
         char *colon = strchr(tok, ':');
         if (colon) {
             *colon = 0;
-            cfg.keys[cfg.keys_n].frame = atoi(tok);
-            cfg.keys[cfg.keys_n].mask  = (uint8_t)strtoul(colon + 1, nullptr, 16);
-            cfg.keys_n++;
+            out[*n].frame = atoi(tok);
+            out[*n].mask  = (uint8_t)strtoul(colon + 1, nullptr, 16);
+            (*n)++;
         }
         tok = strtok(nullptr, ",");
     }
+}
+
+static void parse_keys_env()
+{
+    parse_frame_list("NES_PRESS_KEYS", cfg.keys, 32, &cfg.keys_n);
+    parse_frame_list("NES_FDS_SWAP", cfg.fds_swaps, 8, &cfg.fds_swaps_n);
 }
 
 // ----------------------------------------------------------------------
@@ -290,6 +298,12 @@ int InfoNES_LoadFrame()
         int rc = Emulator_LoadState(cfg.state_path.c_str());
         printf("LOADSTATE frame=%d rc=%d\n", g_frame, rc);
     }
+    for (int i = 0; i < cfg.fds_swaps_n; ++i) {
+        if (cfg.fds_swaps[i].frame == g_frame && IsFDS) {
+            fdsRequestSwap(cfg.fds_swaps[i].mask);
+            printf("FDSSWAP frame=%d side=%d\n", g_frame, cfg.fds_swaps[i].mask);
+        }
+    }
 
     // Decide input for this frame.
     uint8_t mask = 0;
@@ -391,6 +405,13 @@ int main(int argc, char **argv)
     }
     if (!ok) { fprintf(stderr, "ROM parse failed for %s\n", rom_path); return 1; }
 
+    // FDS save data, same order as the device: sidecar loaded after the
+    // parse and before the reset, written back when the game exits.
+    const char *fds_save = IsFDS ? getenv("NES_FDS_SAVE") : nullptr;
+    if (fds_save) {
+        printf("FDSSAVE load %s rc=%d\n", fds_save, (int)fdsLoadSidecar(fds_save));
+    }
+
     if (InfoNES_Reset() < 0) {
         fprintf(stderr, "InfoNES_Reset failed\n"); return 1;
     }
@@ -406,6 +427,9 @@ int main(int argc, char **argv)
 
     if (cfg.dump_vram) dump_vram_files();
     dump_ppm(g_frame);         // final frame snapshot
+
+    if (fds_save)
+        printf("FDSSAVE save %s rc=%d\n", fds_save, (int)fdsSaveSidecar(fds_save));
 
     InfoNES_Fin();
     free(rom);

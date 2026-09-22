@@ -66,14 +66,12 @@ static uint32_t CPUFreqKHz = EMULATOR_CLOCKFREQ_KHZ;
 // Visibility configuration for options menu (NES specific)
 // 1 = show option line, 0 = hide.
 // Order must match enum in menu_options.h
-#if PICO_RP2350
 static const MenuFdsHooks fdsMenuHooks = {
     fdsCurrentSwapValue,
     fdsGetNumSides,
     fdsRequestSwap,
     fdsRequestEject
 };
-#endif
 
 // Non-const so the FDS disk-swap entry can be flipped on per-ROM after
 // fdsParse() detects we're loading a .fds. The pointer in
@@ -100,8 +98,8 @@ int8_t g_settings_visibility_nes[MOPT_COUNT] = {
     [MOPT_BORDER_MODE]             = 0,                    // Border Mode (Super Gameboy style borders not applicable for NES)
     [MOPT_RAPID_FIRE_ON_A]         = 1,                    // Rapid Fire on A
     [MOPT_RAPID_FIRE_ON_B]         = 1,                    // Rapid Fire on B
-    [MOPT_AUTO_INSERT_FDS_DISK_A]  = 0,                    // Auto Insert Disk A, enabled at runtime on RP2350
-    [MOPT_AUTO_SWAP_FDS_DISK]      = 0,                    // Auto Swap FDS, enabled at runtime on RP2350
+    [MOPT_AUTO_INSERT_FDS_DISK_A]  = 1,                    // Auto Insert Disk A
+    [MOPT_AUTO_SWAP_FDS_DISK]      = 1,                    // Auto Swap FDS
     [MOPT_FDS_DISK_SWAP]           = 0,                    // FDS Disk Swap (toggled on after fdsParse succeeds)
     [MOPT_OVERCLOCK]               = 0,                    // Overclock (CPU high clock toggle set at runtime, depends on HSTX and PSRAM available)
     [MOPT_FM_AUDIO]                = 0,                    // YM2413 FM (SMS only, RP2350-only with HSTX)
@@ -222,14 +220,12 @@ void saveNVRAM()
     char fileName[FF_MAX_LFN];
     strcpy(fileName, Frens::GetfileNameFromFullPath(romName));
     Frens::stripextensionfromfilename(fileName);
-#if PICO_RP2350
     if (IsFDS)
     {
         snprintf(pad, FF_MAX_LFN, "%s/%s_fds", GAMESAVEDIR, fileName);
         fdsSaveSidecar(pad);
         return;
     }
-#endif
     if (!SRAMwritten)
     {
         printf("SRAM not updated.\n");
@@ -281,14 +277,11 @@ bool loadNVRAM()
     strcpy(fileName, Frens::GetfileNameFromFullPath(romName));
     Frens::stripextensionfromfilename(fileName);
 
-#if PICO_RP2350
     if (IsFDS)
     {
         snprintf(pad, FF_MAX_LFN, "%s/%s_fds", GAMESAVEDIR, fileName);
-        fdsSetSaveBasePath(pad);
         return fdsLoadSidecar(pad);
     }
-#endif
 
     snprintf(pad, FF_MAX_LFN, "%s/%s.SAV", GAMESAVEDIR, fileName);
 
@@ -693,7 +686,6 @@ void InfoNES_Error(const char *pszMsg, ...)
 }
 bool parseROM(const uint8_t *nesFile)
 {
-#if PICO_RP2350
     // Famicom Disk System dispatch. The disk image was loaded into memory
     // (PSRAM or flash); look up its size from the file on SD so we can
     // determine side count and strip any fwNES header.
@@ -711,8 +703,8 @@ bool parseROM(const uint8_t *nesFile)
             // fdsParse already populated ErrorMessage via InfoNES_Error.
             return false;
         }
-        // Disk image lives in memory at nesFile; PRG/CHR-RAM live in dedicated
-        // FDS_* buffers. ROM/VROM are wired up by Mapper 20 init (phase 3).
+        // Disk image lives in memory at nesFile; PRG-RAM lives in FDS_PrgRam,
+        // SRAM and PPURAM. ROM/VROM are wired up by Mapper 20 init (phase 3).
         ROM = nullptr;
         VROM = nullptr;
         // Phase 5: expose FDS options in the in-game settings menu.
@@ -722,7 +714,6 @@ bool parseROM(const uint8_t *nesFile)
         menuSetFdsHooks(&fdsMenuHooks);
         return true;
     }
-#endif
 
     // NSF (Nintendo Sound Format) detection — check magic or file extension.
     if (checkNSFMagic(nesFile))
@@ -820,7 +811,6 @@ void InfoNES_ReleaseRom()
             nsfRelease();
         return;
     }
-#if PICO_RP2350
     if (IsFDS)
     {
         fdsRelease();
@@ -828,7 +818,6 @@ void InfoNES_ReleaseRom()
         g_settings_visibility_nes[MOPT_FDS_DISK_SWAP] = 0;
         menuSetFdsHooks(nullptr);
     }
-#endif
 }
 
 void InfoNES_SoundInit()
@@ -1658,13 +1647,6 @@ int main()
     initzapper();       // Claims GPIO27/28 as pulled-up inputs (custom PCB only)
     zapperMeasureInit(); // Display-lag measurement, compiled out by default
     bool showSplash = true;
-#if PICO_RP2350
-    g_settings_visibility_nes[MOPT_AUTO_SWAP_FDS_DISK] = 1;
-    g_settings_visibility_nes[MOPT_AUTO_INSERT_FDS_DISK_A] = 1;
-#else
-    g_settings_visibility_nes[MOPT_AUTO_SWAP_FDS_DISK] =   0;
-    g_settings_visibility_nes[MOPT_AUTO_INSERT_FDS_DISK_A] = 0;
-#endif
 #if HSTX
     if ( Frens::isPsramEnabled() ) {
         g_settings_visibility_nes[MOPT_OVERCLOCK] = 1;
@@ -1687,11 +1669,7 @@ int main()
 #else
         if (strlen(selectedRom) == 0)
         {
-#if PICO_RP2350
             const char *romExtensions = ".nes .fds .nsf";
-#else
-            const char *romExtensions = ".nes .nsf";
-#endif
             menu("Pico-InfoNES+", ErrorMessage, isFatalError, showSplash, romExtensions, selectedRom); // With no psram this never returns, but reboots upon selecting a game
             printf("Playing selected ROM from menu: %s\n", selectedRom);
           
@@ -1752,13 +1730,11 @@ int main()
         }
         do {
             resetGame = false;
-#if PICO_RP2350
             if (fdsIsFdsFilename(romName))
             {
                 romSelector_.initRaw(ROM_FILE_ADDR);
             }
             else
-#endif
             if (checkNSFMagic(reinterpret_cast<const uint8_t *>(ROM_FILE_ADDR)))
             {
                 romSelector_.initRaw(ROM_FILE_ADDR);
