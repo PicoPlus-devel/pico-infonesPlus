@@ -3,6 +3,7 @@
 Fix for *Arkanoid* on the custom PCB and the Adafruit breadboard setup: the paddle was stuck on the right side of the screen.
 The 8-sprites-per-line limit from v0.50 can now be turned off in the settings menu.
 Fix for a red screen on RP2040 boards when the same MMC5 game is started twice.
+New **Overscan in menu** setting for TVs that cut off the edges of the menu. It leaves the top and bottom rows, and optionally the first and last columns, blank. [#244](https://github.com/fhoedemakers/pico-infonesPlus/issues/244)
 *Over Obj*.
 
 # General Info

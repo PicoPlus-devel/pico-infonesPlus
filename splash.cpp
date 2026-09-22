@@ -8,7 +8,7 @@ static int fgcolorSplash = DEFAULT_FGCOLOR;
 static int bgcolorSplash = DEFAULT_BGCOLOR;
 void splash()
 {
-    char s[SCREEN_COLS + 1];
+    char s[MAX_SCREEN_COLS + 1];
     ClearScreen(bgcolorSplash);
 
     strcpy(s, "Pico-Info");

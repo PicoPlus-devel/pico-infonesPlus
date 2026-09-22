@@ -113,6 +113,7 @@ int8_t g_settings_visibility_nes[MOPT_COUNT] = {
     [MOPT_DISK]                    = 0,                    // Disk drives (TI-99/4A only)
     [MOPT_SERIAL_KEYBOARD]         = 0,                    // Serial console keyboard (TI-99/4A only)
     [MOPT_SPRITE_LIMIT]            = 1,                    // 8 sprites per scanline limit (menu.cpp lists it below the FDS options)
+    [MOPT_MENU_OVERSCAN]           = 0,                    // Overscan in menu (menu.cpp force-shows this below the menu colors)
 };
 // #if defined(__riscv)
 // const uint8_t g_available_screen_modes[] = {
