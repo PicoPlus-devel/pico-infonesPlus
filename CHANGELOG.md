@@ -1,7 +1,7 @@
 # CHANGELOG
 
-Fix for *Arkanoid* on the custom PCB and the Adafruit breadboard setup: the paddle was stuck on the right side of the screen.
-The 8-sprites-per-line limit from v0.50 can now be turned off in the settings menu.
+New **Overscan in menu** setting for TVs that cut off the edges of the menu.
+RP2040 boards have about 57 KB more free memory.
 
 # General Info
 
@@ -20,6 +20,20 @@ This can be fixed permanently with the [flash_config](https://github.com/fhoedem
 Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then requires erasing the flash with `universal_flash_nuke.uf2` first)
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
+
+# v0.52
+
+## New
+
+- New **Overscan in menu** setting for TVs that cut off the edges of the menu. *Rows* leaves the top and bottom text rows blank, *Rows and columns* also the first and last columns. Games are not affected ([#244](https://github.com/fhoedemakers/pico-infonesPlus/issues/244)). Thanks to [chubunov](https://github.com/chubunov).
+
+## Fixes
+
+- The **Controller Test** screen showed a broken controller outline and a misaligned list of input sources.
+
+## Other
+
+- RP2040 boards: about 57 KB of memory freed. Existing save states keep working.
 
 # v0.51
 
