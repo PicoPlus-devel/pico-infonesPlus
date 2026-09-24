@@ -129,6 +129,9 @@ BYTE *ROMBANK[4];
 /* VROM */
 BYTE *VROM;
 
+/* End of the CHR ROM image - see InfoNES.h */
+BYTE *VROMLimit;
+
 // BYTE *SPRRAM;
 /* PPU Register */
 BYTE PPU_R0;
@@ -777,6 +780,9 @@ void InfoNES_SetupPPU()
 
   /* Reset VRAM Write Enable */
   byVramWriteEnable = (NesHeader.byVRomSize == 0) ? 1 : 0;
+
+  /* Bounds of the CHR ROM image, for the pattern table write guard */
+  VROMLimit = VROM ? VROM + ((DWORD)NesHeader.byVRomSize << 13) : nullptr;
 }
 
 /*===================================================================*/

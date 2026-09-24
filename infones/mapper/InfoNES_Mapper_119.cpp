@@ -205,17 +205,22 @@ void Map119_Set_CPU_Banks()
 /*-------------------------------------------------------------------*/
 /*  Mapper 119 Set PPU Banks Function                                */
 /*-------------------------------------------------------------------*/
+/* The four 1KB registers used to wrap the bank number with the PRG page count
+ * (byRomSize << 1) instead of the CHR one (byVRomSize << 3) - only in the
+ * $8000 bit 7 branch; the same four lines below it were always right. High
+ * Speed and Pin Bot have 64KB of CHR ROM, so every bank from 16 up fetched the
+ * wrong tiles and their title and table screens came out as scrambled text. */
 void Map119_Set_PPU_Banks()
 {
   if( Map119_Reg[0]&0x80 ) {
     if(Map119_Chr4&0x40)	PPUBANK[ 0 ] = CRAMPAGE(Map119_Chr4&0x07);
-    else			PPUBANK[ 0 ] = VROMPAGE(Map119_Chr4 % (NesHeader.byRomSize<<1));
+    else			PPUBANK[ 0 ] = VROMPAGE(Map119_Chr4 % (NesHeader.byVRomSize<<3));
     if(Map119_Chr5&0x40)	PPUBANK[ 1 ] = CRAMPAGE(Map119_Chr5&0x07);
-    else			PPUBANK[ 1 ] = VROMPAGE(Map119_Chr5 % (NesHeader.byRomSize<<1));
+    else			PPUBANK[ 1 ] = VROMPAGE(Map119_Chr5 % (NesHeader.byVRomSize<<3));
     if(Map119_Chr6&0x40)	PPUBANK[ 2 ] = CRAMPAGE(Map119_Chr6&0x07);
-    else			PPUBANK[ 2 ] = VROMPAGE(Map119_Chr6 % (NesHeader.byRomSize<<1));
+    else			PPUBANK[ 2 ] = VROMPAGE(Map119_Chr6 % (NesHeader.byVRomSize<<3));
     if(Map119_Chr7&0x40)	PPUBANK[ 3 ] = CRAMPAGE(Map119_Chr7&0x07);
-    else			PPUBANK[ 3 ] = VROMPAGE(Map119_Chr7 % (NesHeader.byRomSize<<1));
+    else			PPUBANK[ 3 ] = VROMPAGE(Map119_Chr7 % (NesHeader.byVRomSize<<3));
     
     if((Map119_Chr01+0)&0x40)   PPUBANK[ 4 ] = CRAMPAGE((Map119_Chr01+0)&0x07);
     else		        PPUBANK[ 4 ] = VROMPAGE((Map119_Chr01+0) % (NesHeader.byVRomSize<<3));

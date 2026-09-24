@@ -60,6 +60,11 @@ extern BYTE *PPURAM;
 /* VROM */
 extern BYTE *VROM;
 
+/* One past the end of the CHR ROM image, so a PPU write can tell a bank that
+   points into the cartridge's CHR ROM (never writable) from one that points at
+   CHR RAM. Null when the cartridge has no CHR ROM. Set by InfoNES_SetupPPU. */
+extern BYTE *VROMLimit;
+
 /* PPU BANK ( 1Kb * 16 ) */
 extern BYTE *PPUBANK[];
 

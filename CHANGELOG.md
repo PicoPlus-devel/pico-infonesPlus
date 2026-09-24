@@ -1,8 +1,8 @@
 # CHANGELOG
 
-New **Overscan fix in menu** setting for TVs that cut off the edges of the menu.
 Famicom Disk System games now also run on RP2040 boards.
-RP2040 boards have about 57 KB more free memory.
+New **Overscan fix in menu** setting for TVs that cut off the edges of the menu.
+Optimized memory usage on RP2040 boards, freeing up about 57 KB of RAM.
 
 # General Info
 
@@ -26,17 +26,22 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/fhoedemakers/p
 
 ## New
 
-- New **Overscan fix in menu** setting for TVs that cut off the edges of the menu. *Rows* leaves the top and bottom text rows blank, *Rows and columns* also the first and last columns. Games are not affected ([#244](https://github.com/fhoedemakers/pico-infonesPlus/issues/244)). Thanks to [chubunov](https://github.com/chubunov).
 - Famicom Disk System (FDS) games now also run on RP2040 boards. The FDS BIOS is still required.
+- New **Overscan fix in menu** setting for TVs that cut off the edges of the menu. *Rows* leaves the top and bottom text rows blank, *Rows and columns* also the first and last columns. Games are not affected ([#244](https://github.com/fhoedemakers/pico-infonesPlus/issues/244)). Thanks to [chubunov](https://github.com/chubunov).
+
 
 ## Fixes
 
 - The **Controller Test** screen showed a broken controller outline and a misaligned list of input sources.
+- Seicross (Rev 1), Spy vs Spy and Bird Week (Japanese versions) started with a black screen.
+- High Speed and Pin Bot showed scrambled graphics on the title screen and the pinball table. A smaller artifact remains when the table scrolls up ([#245](https://github.com/fhoedemakers/pico-infonesPlus/issues/245)).
+- On boards with PSRAM, games could overwrite their own tile graphics while clearing video memory at startup, which left wrong or missing graphics in, among others, 1942, Tokkyuu Shirei Solbrain, Ganbare Goemon 2 and Star Wars - The Empire Strikes Back.
 
 ## Other
 
 - The settings menu shows more options at once: the color palette now appears only while one of the menu colors is selected.
-- RP2040 boards: about 57 KB of memory freed. Existing save states keep working.
+- In the settings menu, SELECT jumps directly to **SAVE**.
+- RP2040 boards: about 57 KB of memory freed.
 - RP2350 boards without PSRAM: FDS saves are now kept in one file per game, as on boards with PSRAM. Existing saves are picked up automatically.
 
 # v0.51

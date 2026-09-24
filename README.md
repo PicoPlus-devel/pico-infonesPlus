@@ -1127,7 +1127,7 @@ running. Not every entry is available on every board or in every situation.
 | Return to emulator selection | Go back to the emulator picker. Only present in [pico-bootLoader](#running-under-pico-bootloader) builds. |
 
 > [!NOTE]
-> Changes are only applied when you select **SAVE**. **CANCEL** discards them, **DEFAULT** restores the default values.
+> Changes are only applied when you select **SAVE**. **CANCEL** discards them, **DEFAULT** restores the default values. Press SELECT to jump directly to **SAVE**.
 
 ## Emulator (in game)
 Gamepad buttons:
