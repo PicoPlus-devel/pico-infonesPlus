@@ -210,6 +210,8 @@ void Map20_Init();
 
 void Map21_Init();
 void Map21_Write(WORD wAddr, BYTE byData);
+void Map21_Set_Prg();
+void Map21_Set_Chr(int nBank);
 void Map21_HSync();
 
 void Map22_Init();

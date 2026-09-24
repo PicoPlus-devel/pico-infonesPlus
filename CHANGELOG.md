@@ -36,6 +36,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 - Seicross (Rev 1), Spy vs Spy and Bird Week (Japanese versions) started with a black screen.
 - High Speed and Pin Bot showed scrambled graphics on the title screen and the pinball table. A smaller artifact remains when the table scrolls up ([#245](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/245)).
 - On boards with PSRAM, games could overwrite their own tile graphics while clearing video memory at startup, which left wrong or missing graphics in, among others, 1942, Tokkyuu Shirei Solbrain, Ganbare Goemon 2 and Star Wars - The Empire Strikes Back.
+- Ganbare Goemon Gaiden 2 showed scrambled graphics ([#248](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/248)). Thanks to [szuping](https://github.com/szuping).
 
 ## Other
 
