@@ -37,6 +37,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 - High Speed and Pin Bot showed scrambled graphics on the title screen and the pinball table. A smaller artifact remains when the table scrolls up ([#245](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/245)).
 - On boards with PSRAM, games could overwrite their own tile graphics while clearing video memory at startup, which left wrong or missing graphics in, among others, 1942, Tokkyuu Shirei Solbrain, Ganbare Goemon 2 and Star Wars - The Empire Strikes Back.
 - Ganbare Goemon Gaiden 2 showed scrambled graphics ([#248](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/248)). Thanks to [szuping](https://github.com/szuping).
+- Dragon Ball Z II, Dragon Ball Z III, Dragon Ball Z Gaiden, Rokudenashi Blues and SD Gundam Gaiden 2 and 3 could stay on a black screen. Their save data (EEPROM) is now supported, so saving works too ([#246](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/246)).
 
 ## Other
 

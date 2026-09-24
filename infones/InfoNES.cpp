@@ -453,6 +453,7 @@ void InfoNES_Fin()
   if (Map19_Chr_Ram) { Frens::f_free(Map19_Chr_Ram); Map19_Chr_Ram = nullptr; }
   if (Map185_Dummy_Chr_Rom) { Frens::f_free(Map185_Dummy_Chr_Rom); Map185_Dummy_Chr_Rom = nullptr; }
   if (Map188_Dummy) { Frens::f_free(Map188_Dummy); Map188_Dummy = nullptr; }
+  if (Map16_Eeprom) { Frens::f_free(Map16_Eeprom); Map16_Eeprom = nullptr; }
   SstFlash_Release();
   MapperChrRam = nullptr; MapperChrRamSize = 0;
   MapperNtRam = nullptr; MapperNtRamSize = 0;
