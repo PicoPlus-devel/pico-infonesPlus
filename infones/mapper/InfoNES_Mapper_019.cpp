@@ -4,7 +4,8 @@
 /*                                                                   */
 /*===================================================================*/
 
-BYTE Map19_Chr_Ram[0x2000];
+#define MAP19_CHR_RAM_SIZE 0x2000
+BYTE *Map19_Chr_Ram;
 BYTE Map19_Regs[2];
 
 BYTE Map19_IRQ_Enable;
@@ -47,6 +48,13 @@ void Map19_Init()
 
   /* Set SRAM Banks */
   SRAMBANK = SRAM;
+
+  /* Allocate the CHR RAM once; InfoNES_Fin frees it. */
+  if (!Map19_Chr_Ram)
+  {
+    Map19_Chr_Ram = (BYTE *)Frens::f_malloc(MAP19_CHR_RAM_SIZE);
+    InfoNES_MemorySet(Map19_Chr_Ram, 0, MAP19_CHR_RAM_SIZE);
+  }
 
   /* Set ROM Banks */
   ROMBANK0 = ROMPAGE(0);

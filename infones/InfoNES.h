@@ -19,11 +19,11 @@
 /*  NES resources                                                    */
 /*-------------------------------------------------------------------*/
 
-#define RAM_SIZE 0x2000
+// $0000-$1FFF is 2KB of RAM mirrored four times; every access masks with 0x7ff.
+#define RAM_SIZE 0x800
 #define SRAM_SIZE 0x2000
 #define PPURAM_SIZE 0x4000
 #define SPRRAM_SIZE 256
-#define CHRBUF_SIZE 256 * 2 * 8 * 8
 
 /* RAM */
 extern BYTE *RAM;
@@ -59,6 +59,11 @@ extern BYTE *PPURAM;
 //extern BYTE *PPURAM;
 /* VROM */
 extern BYTE *VROM;
+
+/* One past the end of the CHR ROM image, so a PPU write can tell a bank that
+   points into the cartridge's CHR ROM (never writable) from one that points at
+   CHR RAM. Null when the cartridge has no CHR ROM. Set by InfoNES_SetupPPU. */
+extern BYTE *VROMLimit;
 
 /* PPU BANK ( 1Kb * 16 ) */
 extern BYTE *PPUBANK[];
@@ -214,12 +219,6 @@ extern BYTE PPU_ScanTable[];
 /* Name Table Bank */
 extern BYTE PPU_NameTableBank;
 
-/* BG Base Address */
-extern BYTE *PPU_BG_Base;
-
-/* Sprite Base Address */
-extern BYTE *PPU_SP_Base;
-
 /* Sprite Height */
 extern WORD PPU_SP_Height;
 
@@ -250,11 +249,6 @@ extern WORD WorkFrameIdx;
 #else
 // FHextern WORD WorkFrame[NES_DISP_WIDTH * NES_DISP_HEIGHT];
 #endif
-
-extern BYTE *ChrBuf;
-
-
-extern BYTE ChrBufUpdate;
 
 extern WORD PalTable[];
 
@@ -376,9 +370,8 @@ extern BYTE ROM_Trainer;
 extern BYTE ROM_FourScr;
 
 /* True when the loaded image is a Famicom Disk System disk (no iNES header).
-   Set by parseROM in main before InfoNES_Reset. RP2350 only - FDS is
-   compiled out on RP2040, so this is always false there. PSRAM is not
-   required; it only selects multi-side over single-side drive mode. */
+   Set by parseROM in main before InfoNES_Reset. PSRAM is not required; it
+   only selects a fully expanded disk image over the copy-on-write one. */
 extern bool IsFDS;
 
 /* True when the loaded image is an NSF (Nintendo Sound Format) file. */

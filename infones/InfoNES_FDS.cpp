@@ -6,14 +6,16 @@
 /*  allocation, BIOS load, Mapper 20 init, drive emulation, disk     */
 /*  swap UI, save-data sidecar, audio and save-states.               */
 /*                                                                   */
-/*  RP2350 only - main.cpp calls fdsParse() under #if PICO_RP2350.   */
-/*  PSRAM is not required: without it the drive runs in single-side  */
-/*  mode (fds_single_side_mode), rebuilding one side at a time.      */
+/*  PSRAM is not required: without it the disk image stays where the */
+/*  loader put it and only the 4 KB pages the game writes to are     */
+/*  copied into RAM (copy-on-write). That is what makes it fit on    */
+/*  RP2040.                                                          */
 /*                                                                   */
 /*===================================================================*/
 
 #include <string.h>
 #include <stdio.h>
+#include <malloc.h>
 
 #include "InfoNES_FDS.h"
 #include "InfoNES.h"
@@ -22,9 +24,18 @@
 #include "FrensHelpers.h"
 
 extern unsigned int ApuCyclesPerSample;
+extern int g_wPassedClocks;   /* K6502.cpp */
 #include "ff.h"
 #include "K6502.h"
 #include "settings.h"
+
+/* RP2040 keeps the FDS audio in flash: its RAM is better spent on the
+   disk pages, and non-FDS games would pay for the code as well. */
+#if PICO_RP2350
+#define FDS_RAMFUNC(f) __not_in_flash_func(f)
+#else
+#define FDS_RAMFUNC(f) f
+#endif
 
 /*-------------------------------------------------------------------*/
 /*  FDS state                                                        */
@@ -32,7 +43,6 @@ extern unsigned int ApuCyclesPerSample;
 
 BYTE *FDS_Bios       = nullptr;
 BYTE *FDS_PrgRam     = nullptr;
-BYTE *FDS_ChrRam     = nullptr;
 BYTE *FDS_DiskImage  = nullptr;
 int   FDS_NumSides   = 0;
 int   FDS_CurrentSide = 0;
@@ -96,19 +106,13 @@ static BYTE  fds_write_buf     = 0;
 static int   fds_eject_counter = 0;
 static int   fds_pending_side  = -1;
 
-/* Single-side mode: only one side's expanded buffer is kept in memory
-   at a time. Enabled when PSRAM is not available (RP2350 without PSRAM).
-   On side swap, dirty pages are flushed and the buffer is rebuilt. */
-static bool  fds_single_side_mode = false;
-static int   fds_expanded_side    = -1;
-
-/* Deferred rebuild: in single-side mode, fdsRebuildForSide does SD I/O
-   which overflows the stack when called from the deep fdsHsync chain.
-   Instead, we set a pending side and do the rebuild at frame boundary. */
-static volatile int fds_rebuild_pending_side = -1;
-#define FDS_SAVE_BASE_LEN 256
-static char  fds_save_base[FDS_SAVE_BASE_LEN] = {0};
-static char  fds_sidecar_path[FDS_SAVE_BASE_LEN + 16] = {0};
+/* The BIOS disk-header check at $E445 opens with JSR $E6E3. fdsParse points
+   that JSR at FDS_HOOK_ADDR, which is open bus on the FDS; fdsApuRead serves
+   JMP $E6E3 there and runs fdsAutoInsertCheck() on the way. This replaces a
+   PC == $E445 test on every emulated instruction. */
+#define FDS_HOOK_ADDR     0x5FF0
+#define FDS_BIOS_HOOK_OFS 0x0445
+static bool  fds_hook_patched = false;
 
 /* Mesen2-style automatic disk-side switching. When the BIOS repeatedly
    polls $4032 (disk-not-inserted check) in quick succession, it means
@@ -157,20 +161,18 @@ static int   fds_manual_insert_delay = 0;       /* frames to skip before accepti
 #define FDS_FAKE_CRC_HI        0x4D
 #define FDS_FAKE_CRC_LO        0x62
 
-static BYTE  *fds_expanded            = nullptr;
-static DWORD  fds_expanded_total_size = 0;
+/* Disk image storage. Side s lives at [s * FDS_PER_SIDE_MAX, + fds_side_sizes[s])
+   of one flat offset space, split into FDS_PAGE_SIZE pages.
+   - With PSRAM, fds_expanded holds the whole expanded image.
+   - Without PSRAM, the raw image stays where the loader put it (flash on
+     RP2040) and fds_pages[p] is only allocated when the drive first writes
+     to page p (copy-on-write). Every other byte is synthesised from the raw
+     image and the block tables. A resident page is always a dirty page. */
+static BYTE  *fds_expanded        = nullptr;
+static BYTE **fds_pages           = nullptr;
+static DWORD  fds_disk_total_size = 0;
 static DWORD  fds_side_offsets[FDS_MAX_SIDES] = {0};
 static DWORD  fds_side_sizes[FDS_MAX_SIDES]   = {0};
-
-static inline BYTE *fdsCurrentSideBuf()
-{
-  return fds_expanded ? fds_expanded + fds_side_offsets[FDS_CurrentSide] : nullptr;
-}
-
-static inline DWORD fdsCurrentSideSize()
-{
-  return fds_side_sizes[FDS_CurrentSide];
-}
 
 /* Phase 6: dirty-page bitmap for save-data writeback. Per 4 KB page
    on the EXPANDED image (not the raw .fds), since that's what we
@@ -271,7 +273,7 @@ BYTE *fds_wave_buffer = nullptr;
 /*-------------------------------------------------------------------*/
 /*  FDS audio envelope tick helper (shared by volume + mod channels) */
 /*-------------------------------------------------------------------*/
-static inline bool __not_in_flash_func(fdsTickEnvelope)(BYTE speed, BYTE env_off,
+static inline bool FDS_RAMFUNC(fdsTickEnvelope)(BYTE speed, BYTE env_off,
                                    BYTE increase, BYTE *gain,
                                    DWORD *timer)
 {
@@ -298,7 +300,7 @@ static inline bool __not_in_flash_func(fdsTickEnvelope)(BYTE speed, BYTE env_off
 /*-------------------------------------------------------------------*/
 /*  FDS modulation output calculation (Mesen2 algorithm).            */
 /*-------------------------------------------------------------------*/
-static void __not_in_flash_func(fdsUpdateModOutput)(WORD volumePitch)
+static void FDS_RAMFUNC(fdsUpdateModOutput)(WORD volumePitch)
 {
   /* Mesen2 "ModChannel::UpdateOutput" — NesDev wiki algorithm.
      counter = $4085 signed 7-bit, gain = $4084 6-bit unsigned. */
@@ -326,7 +328,7 @@ static void __not_in_flash_func(fdsUpdateModOutput)(WORD volumePitch)
 /*-------------------------------------------------------------------*/
 /*  FDS modulation counter update (Mesen2 ModChannel::UpdateCounter) */
 /*-------------------------------------------------------------------*/
-static inline void __not_in_flash_func(fdsUpdateModCounter)(int8_t value)
+static inline void FDS_RAMFUNC(fdsUpdateModCounter)(int8_t value)
 {
   fds_mod_counter = value;
   if (fds_mod_counter >= 64)
@@ -341,7 +343,7 @@ static inline void __not_in_flash_func(fdsUpdateModCounter)(int8_t value)
 static const int __not_in_flash("fds_audio") fds_mod_lut[8] = {0, 1, 2, 4, 0x7F, -4, -2, -1};
 #define FDS_MOD_RESET 0x7F
 
-static inline bool __not_in_flash_func(fdsTickModulator)()
+static inline bool FDS_RAMFUNC(fdsTickModulator)()
 {
   if (!fds_mod_disabled && fds_mod_frequency > 0)
   {
@@ -400,7 +402,7 @@ void fdsResetAudio()
 /*
  *  Linear-walk drive emulation (Mesen2-style).
  *
- *  fdsBuildExpandedBuffer() expands the raw .fds at load time into a
+ *  fdsBuildDisk() expands the raw .fds at load time into a
  *  wire-format buffer that contains gaps and fake CRC slots. The
  *  drive walks this buffer linearly — one byte per FDS_CYC_PER_BYTE
  *  cycles. No phase machine, no auto-transitions.
@@ -425,30 +427,31 @@ void fdsResetAudio()
  */
 #define FDS_MAX_BLOCKS_PER_SIDE 80
 
-static DWORD fds_block_starts[FDS_MAX_SIDES][FDS_MAX_BLOCKS_PER_SIDE] = {{0}};
+/* Allocated per side in fdsParse, so a non-FDS game does not carry 5 KB
+   of tables in static RAM. */
+static DWORD (*fds_block_starts)[FDS_MAX_BLOCKS_PER_SIDE] = nullptr;
 /* fds_block_ends[s][i] = position one past the last CRC byte of block i.
    When emit advances pos to this value, we've just finished block i — flip
    gap_ended=0 so the inter-block gap zeros are walked silently rather than
    emitted to BIOS as bogus data bytes. */
-static DWORD fds_block_ends[FDS_MAX_SIDES][FDS_MAX_BLOCKS_PER_SIDE] = {{0}};
+static DWORD (*fds_block_ends)[FDS_MAX_BLOCKS_PER_SIDE] = nullptr;
 static int   fds_block_counts[FDS_MAX_SIDES] = {0};
 
 static BYTE  fds_gap_ended = 0;   /* 0 = walking through gap zeros + 0x80 mark, 1 = emitting */
 
 /*-------------------------------------------------------------------*/
 /*  fdsExpandOneSide: expand a single side of the raw .fds into dest */
-/*  at destStart, writing gaps + marks + CRC slots. Records block    */
-/*  metadata in fds_block_starts/ends/counts for side sideIndex.     */
-/*  Returns the write position after expansion.                      */
+/*  (the start of that side in the expanded image), writing gaps +   */
+/*  marks + CRC slots. Records block metadata in fds_block_starts/   */
+/*  ends/counts for side sideIndex. With dest == nullptr only the    */
+/*  metadata is built, for the copy-on-write image.                  */
 /*-------------------------------------------------------------------*/
 #define FDS_PER_SIDE_MAX  (FDS_SIDE_SIZE + 8192)
+#define FDS_BLOCK_OVERHEAD (3 + FDS_INTER_BLOCK_GAP) /* mark + 2 CRC + gap */
 
-static DWORD fdsExpandOneSide(BYTE *rawDisk, int sideIndex,
-                              BYTE *dest, DWORD destStart)
+static void fdsExpandOneSide(const BYTE *rawDisk, int sideIndex, BYTE *dest)
 {
-  DWORD writePos = destStart;
-
-  writePos += FDS_INITIAL_GAP_BYTES;
+  DWORD writePos = FDS_INITIAL_GAP_BYTES;
 
   DWORD srcBase = (DWORD)sideIndex * FDS_SIDE_SIZE;
   DWORD srcPos  = 0;
@@ -477,82 +480,246 @@ static DWORD fdsExpandOneSide(BYTE *rawDisk, int sideIndex,
     }
 
     if ((DWORD)(srcPos + blockSize) > FDS_SIDE_SIZE) goto done;
+    /* A side's gaps and marks must not run into the next side. */
+    if (writePos + 3 + (DWORD)blockSize > FDS_PER_SIDE_MAX) goto done;
 
-    dest[writePos++] = FDS_MARK_BYTE;
-    fds_block_starts[sideIndex][blkIdx] = (writePos - 1) - destStart;
-
-    memcpy(&dest[writePos], &rawDisk[srcBase + srcPos], (size_t)blockSize);
-    writePos += blockSize;
+    fds_block_starts[sideIndex][blkIdx] = writePos;
+    if (dest)
+    {
+      dest[writePos] = FDS_MARK_BYTE;
+      memcpy(&dest[writePos + 1], &rawDisk[srcBase + srcPos], (size_t)blockSize);
+      dest[writePos + 1 + blockSize] = FDS_FAKE_CRC_HI;
+      dest[writePos + 2 + blockSize] = FDS_FAKE_CRC_LO;
+    }
+    writePos += 3 + blockSize;
     srcPos   += blockSize;
 
-    dest[writePos++] = FDS_FAKE_CRC_HI;
-    dest[writePos++] = FDS_FAKE_CRC_LO;
-
-    fds_block_ends[sideIndex][blkIdx] = writePos - destStart;
+    fds_block_ends[sideIndex][blkIdx] = writePos;
     blkIdx++;
 
     writePos += FDS_INTER_BLOCK_GAP;
   }
 done:
   fds_block_counts[sideIndex] = blkIdx;
-  {
-    DWORD contentSize = writePos - destStart;
-    fds_side_sizes[sideIndex] = contentSize < FDS_SIDE_SIZE ? FDS_SIDE_SIZE : contentSize;
-  }
+  if (writePos > FDS_PER_SIDE_MAX) writePos = FDS_PER_SIDE_MAX;
+  fds_side_sizes[sideIndex] = writePos < FDS_SIDE_SIZE ? FDS_SIDE_SIZE : writePos;
 
   FDS_LOG("side %d: %d block(s), expanded size %lu B\n",
           sideIndex, blkIdx, (unsigned long)fds_side_sizes[sideIndex]);
+#if FDS_TRACE
   for (int b = 0; b < blkIdx && b < 6; ++b)
   {
-    DWORD pos = fds_block_starts[sideIndex][b];
-    BYTE val = dest[destStart + pos];
-    FDS_LOG("  blk[%d] start=%lu end=%lu byte=0x%02X\n",
-            b, (unsigned long)pos,
-            (unsigned long)fds_block_ends[sideIndex][b], val);
+    FDS_LOG("  blk[%d] start=%lu end=%lu\n", b,
+            (unsigned long)fds_block_starts[sideIndex][b],
+            (unsigned long)fds_block_ends[sideIndex][b]);
   }
-
-  return writePos;
+#endif
 }
 
 /*-------------------------------------------------------------------*/
-/*  fdsBuildExpandedBuffer: allocate and build the expanded disk      */
-/*  image. In multi-side mode (PSRAM) all sides are built; in        */
-/*  single-side mode only side 0 is built initially.                 */
+/*  Copy-on-write disk image (no PSRAM).                             */
+/*                                                                   */
+/*  fdsSynthByte / fdsSynthRange produce the expanded image from the */
+/*  raw one, exactly as fdsExpandOneSide would write it. Block i's   */
+/*  payload starts at raw offset                                     */
+/*    starts[i] - FDS_INITIAL_GAP_BYTES - i * FDS_BLOCK_OVERHEAD,    */
+/*  because every earlier block added a mark, two CRC bytes and a    */
+/*  gap. This relies on the block tables describing the pristine     */
+/*  image: nothing rewrites an existing entry at runtime.            */
 /*-------------------------------------------------------------------*/
-static bool fdsBuildExpandedBuffer(BYTE *rawDisk, int sides)
+
+/* Block index of the last fdsSynthByte hit. The drive reads sequentially,
+   so the next byte is nearly always in the same block or the next one. */
+static int fds_synth_side = -1;
+static int fds_synth_blk  = 0;
+
+static BYTE fdsSynthByte(DWORD off)
 {
-  if (fds_expanded) { Frens::f_free(fds_expanded); fds_expanded = nullptr; }
+  int   s   = (int)(off / FDS_PER_SIDE_MAX);
+  DWORD pos = off - (DWORD)s * FDS_PER_SIDE_MAX;
+  if (s >= FDS_NumSides) return 0;
 
-  int numSidesToBuild = fds_single_side_mode ? 1 : sides;
-  DWORD totalMax = (DWORD)numSidesToBuild * FDS_PER_SIDE_MAX;
+  const DWORD *starts = fds_block_starts[s];
+  const DWORD *ends   = fds_block_ends[s];
+  int n = fds_block_counts[s];
+  /* Resume from the cached block if every block before it ends at or
+     before pos; otherwise scan from the start of the side. */
+  int i = fds_synth_blk;
+  if (s != fds_synth_side || i > n || (i > 0 && ends[i - 1] > pos))
+    i = 0;
+  while (i < n && ends[i] <= pos) ++i;
+  fds_synth_side = s;
+  fds_synth_blk  = i;
 
-  fds_expanded = (BYTE *)Frens::f_malloc(totalMax);
-  if (!fds_expanded)
+  if (i == n || pos < starts[i]) return 0; /* gap */
+  DWORD k    = pos - starts[i];
+  DWORD size = ends[i] - starts[i] - 3;
+  if (k == 0) return FDS_MARK_BYTE;
+  if (k <= size)
+    return FDS_DiskImage[(DWORD)s * FDS_SIDE_SIZE + starts[i] -
+                         FDS_INITIAL_GAP_BYTES - (DWORD)i * FDS_BLOCK_OVERHEAD + k - 1];
+  return k == size + 1 ? FDS_FAKE_CRC_HI : FDS_FAKE_CRC_LO;
+}
+
+/* Fill dst with bytes [off, off + len) of the expanded image. The range may
+   cross a side boundary: FDS_PER_SIDE_MAX is not a multiple of a page. */
+static void fdsSynthRange(DWORD off, BYTE *dst, DWORD len)
+{
+  memset(dst, 0, len);
+  while (len)
   {
-    InfoNES_Error("FDS: cannot allocate %u bytes for expanded buffer", (unsigned)totalMax);
-    return false;
+    int   s     = (int)(off / FDS_PER_SIDE_MAX);
+    DWORD pos   = off - (DWORD)s * FDS_PER_SIDE_MAX;
+    DWORD chunk = FDS_PER_SIDE_MAX - pos;
+    if (chunk > len) chunk = len;
+    DWORD end   = pos + chunk;
+
+    for (int i = 0; s < FDS_NumSides && i < fds_block_counts[s]; ++i)
+    {
+      DWORD bs = fds_block_starts[s][i];
+      DWORD be = fds_block_ends[s][i];
+      if (be <= pos) continue;
+      if (bs >= end) break;
+      DWORD size = be - bs - 3;
+      const BYTE *payload = FDS_DiskImage + (DWORD)s * FDS_SIDE_SIZE + bs -
+                            FDS_INITIAL_GAP_BYTES - (DWORD)i * FDS_BLOCK_OVERHEAD;
+
+      if (bs >= pos) dst[bs - pos] = FDS_MARK_BYTE;
+      DWORD a = bs + 1 > pos ? bs + 1 : pos;
+      DWORD b = bs + 1 + size < end ? bs + 1 + size : end;
+      if (a < b) memcpy(dst + (a - pos), payload + (a - bs - 1), b - a);
+      if (be - 2 >= pos && be - 2 < end) dst[be - 2 - pos] = FDS_FAKE_CRC_HI;
+      if (be - 1 >= pos && be - 1 < end) dst[be - 1 - pos] = FDS_FAKE_CRC_LO;
+    }
+
+    off += chunk;
+    dst += chunk;
+    len -= chunk;
   }
-  memset(fds_expanded, 0, totalMax);
+}
 
-  if (fds_single_side_mode)
+/* Heap left for the disk pages. They are allocated mid-game, where an
+   out-of-memory panic would take the emulator down, and without PSRAM
+   f_malloc is plain malloc. keepcost is the top chunk, which is where a
+   fresh block comes from once pico_shared's claimHeap() has grown the
+   heap to its full size. */
+#define FDS_HEAP_SLACK   4096   /* left over for save states and the menu */
+#define FDS_PAGE_RESERVE (4 * FDS_PAGE_SIZE) /* preflight: room for saves */
+
+static size_t fdsHeapFree()
+{
+#if PICO_NO_HARDWARE
+  return (size_t)-1;
+#else
+  return (size_t)mallinfo().keepcost;
+#endif
+}
+
+static bool fdsHeapHasRoom(size_t n)
+{
+  return fdsHeapFree() >= n + FDS_HEAP_SLACK;
+}
+
+static int  fds_resident_pages = 0;
+static bool fds_page_alloc_failed = false;
+
+/* Page p of the copy-on-write image, materialised on first use. */
+static BYTE *fdsPage(unsigned p)
+{
+  BYTE *pg = fds_pages[p];
+  if (pg) return pg;
+  if (!fdsHeapHasRoom(FDS_PAGE_SIZE))
   {
-    fds_side_offsets[0] = 0;
-    fdsExpandOneSide(rawDisk, 0, fds_expanded, 0);
-    fds_expanded_side = 0;
-    fds_expanded_total_size = FDS_PER_SIDE_MAX;
+    if (!fds_page_alloc_failed)
+      printf("FDS: out of memory for disk page %u, disk write dropped\n", p);
+    fds_page_alloc_failed = true;
+    return nullptr;
+  }
+  pg = (BYTE *)Frens::f_malloc(FDS_PAGE_SIZE);
+  fdsSynthRange((DWORD)p * FDS_PAGE_SIZE, pg, FDS_PAGE_SIZE);
+  fds_pages[p] = pg;
+  fds_resident_pages++;
+  return pg;
+}
+
+static inline BYTE fdsDiskRead(DWORD off)
+{
+  if (fds_expanded) return fds_expanded[off];
+  BYTE *pg = fds_pages[off / FDS_PAGE_SIZE];
+  return pg ? pg[off % FDS_PAGE_SIZE] : fdsSynthByte(off);
+}
+
+static inline void fdsDiskWrite(DWORD off, BYTE byData)
+{
+  if (fds_expanded)
+  {
+    fds_expanded[off] = byData;
   }
   else
   {
-    DWORD writePos = 0;
-    for (int s = 0; s < sides; ++s)
-    {
-      fds_side_offsets[s] = writePos;
-      fdsExpandOneSide(rawDisk, s, fds_expanded, writePos);
-      writePos += FDS_PER_SIDE_MAX;
-    }
-    fds_expanded_total_size = (DWORD)sides * FDS_PER_SIDE_MAX;
+    BYTE *pg = fdsPage(off / FDS_PAGE_SIZE);
+    if (!pg) return;
+    pg[off % FDS_PAGE_SIZE] = byData;
+  }
+  fdsMarkDirty(off);
+}
+
+/* Store n bytes at off and mark their pages dirty. False when a page could
+   not be allocated. */
+static bool fdsDiskWriteRange(DWORD off, const BYTE *src, DWORD n)
+{
+  while (n)
+  {
+    DWORD inPage = FDS_PAGE_SIZE - off % FDS_PAGE_SIZE;
+    DWORD chunk  = n < inPage ? n : inPage;
+    BYTE *dst;
+    if (fds_expanded)
+      dst = fds_expanded + off;
+    else if ((dst = fdsPage(off / FDS_PAGE_SIZE)) != nullptr)
+      dst += off % FDS_PAGE_SIZE;
+    else
+      return false;
+    memcpy(dst, src, chunk);
+    fdsMarkDirty(off);
+    off += chunk;
+    src += chunk;
+    n   -= chunk;
+  }
+  return true;
+}
+
+/*-------------------------------------------------------------------*/
+/*  fdsBuildDisk: set up the expanded disk image for all sides. With */
+/*  PSRAM it is built in full; without, only the block tables are    */
+/*  built and pages are materialised on the first write.             */
+/*-------------------------------------------------------------------*/
+static bool fdsBuildDisk(const BYTE *rawDisk, int sides, bool copyOnWrite)
+{
+  fds_disk_total_size = (DWORD)sides * FDS_PER_SIDE_MAX;
+  unsigned numPages = (fds_disk_total_size + FDS_PAGE_SIZE - 1) / FDS_PAGE_SIZE;
+
+  if (copyOnWrite)
+  {
+    fds_pages = (BYTE **)Frens::f_malloc(numPages * sizeof(BYTE *));
+    if (fds_pages) memset(fds_pages, 0, numPages * sizeof(BYTE *));
+  }
+  else
+  {
+    fds_expanded = (BYTE *)Frens::f_malloc(fds_disk_total_size);
+    if (fds_expanded) memset(fds_expanded, 0, fds_disk_total_size);
+  }
+  if (!fds_pages && !fds_expanded)
+  {
+    InfoNES_Error("FDS: cannot allocate the disk image");
+    return false;
   }
 
+  for (int s = 0; s < sides; ++s)
+  {
+    fds_side_offsets[s] = (DWORD)s * FDS_PER_SIDE_MAX;
+    fdsExpandOneSide(rawDisk, s, fds_expanded ? fds_expanded + fds_side_offsets[s] : nullptr);
+  }
+  fds_synth_side = -1;
   return true;
 }
 
@@ -582,7 +749,6 @@ bool fdsIsFdsFilename(const char *filename)
 /*  Preflight checks                                                 */
 /*-------------------------------------------------------------------*/
 
-#if PICO_RP2350
 static bool fdsBiosFileOk(size_t *outSize)
 {
   FILINFO fno;
@@ -621,7 +787,6 @@ static bool fdsLoadBios(BYTE *dst)
   }
   return true;
 }
-#endif
 
 /*-------------------------------------------------------------------*/
 /*  fdsParse: gate + allocate + load BIOS                            */
@@ -642,18 +807,13 @@ bool fdsParse(BYTE *fdsImage, size_t fdsImageSize)
      iNES game would silently drop PPU $0000-$1FFF writes. */
   memset(&NesHeader, 0, sizeof(NesHeader));
 
-#if !PICO_RP2350
-  (void)fdsImage; (void)fdsImageSize;
-  InfoNES_Error("FDS support requires RP2350");
-  return false;
-#else
   if (!fdsImage || fdsImageSize == 0)
   {
     InfoNES_Error("FDS image is empty");
     return false;
   }
 
-  fds_single_side_mode = !Frens::isPsramEnabled();
+  bool copyOnWrite = !Frens::isPsramEnabled();
 
   /* Strip optional 16-byte fwNES header. */
   BYTE *diskBytes = fdsImage;
@@ -677,15 +837,32 @@ bool fdsParse(BYTE *fdsImage, size_t fdsImageSize)
     return false;
   }
 
-  size_t need = FDS_BIOS_SIZE + FDS_PRG_RAM_SIZE + FDS_CHR_RAM_SIZE;
-  if (fds_single_side_mode)
-    need += FDS_PER_SIDE_MAX;
-  uint avail = Frens::GetAvailableMemory();
-  if (avail < need)
+  /* The expansion audio buffer is allocated later, by Map20_Init. */
+  DWORD  total  = (DWORD)sides * FDS_PER_SIDE_MAX;
+  size_t tables = (size_t)sides * (sizeof(*fds_block_starts) + sizeof(*fds_block_ends));
+  size_t need   = FDS_BIOS_SIZE + FDS_PRG_RAM_SIZE + APU_MAX_SAMPLES_PER_SYNC + tables;
+  size_t avail;
+  if (copyOnWrite)
   {
-    InfoNES_Error("Not enough memory for FDS (%u < %u)",
-                  (unsigned)avail, (unsigned)need);
-    return false;
+    need += ((total + FDS_PAGE_SIZE - 1) / FDS_PAGE_SIZE) * sizeof(BYTE *) + FDS_PAGE_RESERVE;
+    avail = fdsHeapFree();
+    if (!fdsHeapHasRoom(need))
+    {
+      InfoNES_Error("Not enough memory for FDS (%uK free, %uK needed)",
+                    (unsigned)(avail >> 10), (unsigned)((need + FDS_HEAP_SLACK) >> 10));
+      return false;
+    }
+  }
+  else
+  {
+    need += total;
+    avail = Frens::GetAvailableMemory();
+    if (avail < need)
+    {
+      InfoNES_Error("Not enough memory for FDS (%u < %u)",
+                    (unsigned)avail, (unsigned)need);
+      return false;
+    }
   }
 
   if (!fdsBiosFileOk(nullptr))
@@ -694,10 +871,11 @@ bool fdsParse(BYTE *fdsImage, size_t fdsImageSize)
     return false;
   }
 
-  FDS_Bios   = (BYTE *)Frens::f_malloc(FDS_BIOS_SIZE);
-  FDS_PrgRam = (BYTE *)Frens::f_malloc(FDS_PRG_RAM_SIZE);
-  FDS_ChrRam = (BYTE *)Frens::f_malloc(FDS_CHR_RAM_SIZE);
-  if (!FDS_Bios || !FDS_PrgRam || !FDS_ChrRam)
+  FDS_Bios         = (BYTE *)Frens::f_malloc(FDS_BIOS_SIZE);
+  FDS_PrgRam       = (BYTE *)Frens::f_malloc(FDS_PRG_RAM_SIZE);
+  fds_block_starts = (DWORD (*)[FDS_MAX_BLOCKS_PER_SIDE])Frens::f_malloc(sides * sizeof(*fds_block_starts));
+  fds_block_ends   = (DWORD (*)[FDS_MAX_BLOCKS_PER_SIDE])Frens::f_malloc(sides * sizeof(*fds_block_ends));
+  if (!FDS_Bios || !FDS_PrgRam || !fds_block_starts || !fds_block_ends)
   {
     InfoNES_Error("FDS memory allocation failed");
     fdsRelease();
@@ -705,7 +883,8 @@ bool fdsParse(BYTE *fdsImage, size_t fdsImageSize)
   }
 
   memset(FDS_PrgRam, 0, FDS_PRG_RAM_SIZE);
-  memset(FDS_ChrRam, 0, FDS_CHR_RAM_SIZE);
+  /* $6000-$7FFF is the core's SRAM buffer (see Map20_Init). */
+  memset(SRAM, 0, SRAM_SIZE);
 
   if (!fdsLoadBios(FDS_Bios))
   {
@@ -713,11 +892,25 @@ bool fdsParse(BYTE *fdsImage, size_t fdsImageSize)
     return false;
   }
 
+  /* See FDS_HOOK_ADDR. A BIOS whose header check does not open with
+     JSR $E6E3 is left alone; it only loses automatic side switching. */
+  BYTE *hook = FDS_Bios + FDS_BIOS_HOOK_OFS;
+  fds_hook_patched = hook[0] == 0x20 && hook[1] == 0xE3 && hook[2] == 0xE6;
+  if (fds_hook_patched)
+  {
+    hook[1] = FDS_HOOK_ADDR & 0xFF;
+    hook[2] = FDS_HOOK_ADDR >> 8;
+  }
+  else
+  {
+    printf("FDS: unknown BIOS, automatic disk side switching is off\n");
+  }
+
   FDS_DiskImage = diskBytes;
   FDS_NumSides = sides;
   FDS_CurrentSide = 0;
 
-  if (!fdsBuildExpandedBuffer(diskBytes, sides))
+  if (!fdsBuildDisk(diskBytes, sides, copyOnWrite))
   {
     fdsRelease();
     return false;
@@ -728,12 +921,13 @@ bool fdsParse(BYTE *fdsImage, size_t fdsImageSize)
   fds_pending_side  = -1;
   fdsClearDirtyBitmap();
 
-  printf("FDS: image %u bytes, %d side(s), %s mode; avail before alloc %u, after %u\n",
-         (unsigned)diskSize, sides,
-         fds_single_side_mode ? "single-side" : "multi-side",
-         (unsigned)avail, (unsigned)Frens::GetAvailableMemory());
+  if (copyOnWrite)
+    printf("FDS: image %u bytes, %d side(s), copy-on-write; heap %uK free before, %uK after\n",
+           (unsigned)diskSize, sides, (unsigned)(avail >> 10), (unsigned)(fdsHeapFree() >> 10));
+  else
+    printf("FDS: image %u bytes, %d side(s), multi-side mode; avail before alloc %u, after %u\n",
+           (unsigned)diskSize, sides, (unsigned)avail, (unsigned)Frens::GetAvailableMemory());
   return true;
-#endif
 }
 
 /*-------------------------------------------------------------------*/
@@ -811,110 +1005,104 @@ bool fdsHasDirtyPages()
   return false;
 }
 
-#if PICO_RP2350
 static int fdsTotalPages()
 {
-  /* Page count covers the expanded buffer (which is what we actually
-     mutate at runtime), not the raw .fds. */
-  return (int)((fds_expanded_total_size + FDS_PAGE_SIZE - 1) / FDS_PAGE_SIZE);
+  return (int)((fds_disk_total_size + FDS_PAGE_SIZE - 1) / FDS_PAGE_SIZE);
 }
-#endif
+
+/* Set when saved data could not be loaded in full. Writing the sidecar
+   back would then lose the pages that were left out, so it is skipped. */
+static bool fds_sidecar_incomplete = false;
+
+#define FDS_PATH_MAX 280
+#define FDS_SIDECAR_ABSENT (-1)
 
 /*-------------------------------------------------------------------*/
-/*  Internal sidecar I/O: work with a concrete file path.            */
-/*  storedSideCount is written into / checked against hdr[5].        */
-/*  In multi-side mode this is FDS_NumSides (all sides in one file). */
-/*  In single-side mode this is 1 (one side per file).               */
+/*  fdsApplySidecar: load one sidecar file whose pages cover         */
+/*  [base, base + span) of the disk image. The current format is a   */
+/*  single file for all sides (base 0, storedSides = FDS_NumSides).  */
+/*  Builds before the copy-on-write image kept one file per side on  */
+/*  boards without PSRAM, "_s<N>.SAV", with pages relative to that   */
+/*  side (base = N * FDS_PER_SIDE_MAX, storedSides 1). Those pages   */
+/*  do not line up with the flat ones, hence the byte-range copy.    */
+/*  Returns 1 when applied, 0 when ignored or failed, or             */
+/*  FDS_SIDECAR_ABSENT.                                              */
 /*-------------------------------------------------------------------*/
-#if PICO_RP2350
-static FIL fds_sidecar_fil;
-
-static bool fdsLoadSidecarFromFile(const char *filePath, int expectedSideCount)
+static int fdsApplySidecar(FIL *fil, const char *filePath, int storedSides,
+                           DWORD base, DWORD span)
 {
-  if (!IsFDS || !fds_expanded || !filePath) return false;
-
-  if (f_open(&fds_sidecar_fil, filePath, FA_READ) != FR_OK)
-    return true; /* absent is OK */
+  if (f_open(fil, filePath, FA_READ) != FR_OK)
+    return FDS_SIDECAR_ABSENT;
 
   BYTE hdr[8];
   UINT br = 0;
-  if (f_read(&fds_sidecar_fil, hdr, sizeof(hdr), &br) != FR_OK || br != sizeof(hdr) ||
+  if (f_read(fil, hdr, sizeof(hdr), &br) != FR_OK || br != sizeof(hdr) ||
       hdr[0] != FDS_SIDECAR_MAGIC0 || hdr[1] != FDS_SIDECAR_MAGIC1 ||
       hdr[2] != FDS_SIDECAR_MAGIC2 || hdr[3] != FDS_SIDECAR_MAGIC3 ||
-      hdr[4] != FDS_SIDECAR_VERSION || hdr[5] != (BYTE)expectedSideCount)
+      hdr[4] != FDS_SIDECAR_VERSION || hdr[5] != (BYTE)storedSides)
   {
     printf("FDS sidecar header mismatch — ignoring %s.\n", filePath);
-    f_close(&fds_sidecar_fil);
-    return true;
+    f_close(fil);
+    return 0;
   }
 
-  int numPages = fdsTotalPages();
+  int numPages = (int)((span + FDS_PAGE_SIZE - 1) / FDS_PAGE_SIZE);
   int bmBytes = hdr[6];
   if (bmBytes != (numPages + 7) / 8)
   {
     printf("FDS sidecar bitmap size mismatch — ignoring %s.\n", filePath);
-    f_close(&fds_sidecar_fil);
-    return true;
+    f_close(fil);
+    return 0;
   }
 
   BYTE bm[(FDS_MAX_PAGES + 7) / 8] = {0};
-  if (f_read(&fds_sidecar_fil, bm, bmBytes, &br) != FR_OK || br != (UINT)bmBytes)
+  if (f_read(fil, bm, bmBytes, &br) != FR_OK || br != (UINT)bmBytes)
   {
-    f_close(&fds_sidecar_fil);
-    return false;
+    f_close(fil);
+    return 0;
   }
 
-  DWORD totalBytes = fds_expanded_total_size;
   int loaded = 0;
   for (int p = 0; p < numPages; ++p)
   {
     if (!((bm[p >> 3] >> (p & 7)) & 1)) continue;
     DWORD off = (DWORD)p * FDS_PAGE_SIZE;
-    DWORD bytes = FDS_PAGE_SIZE;
-    if (off >= totalBytes) bytes = 0;
-    else if (off + bytes > totalBytes) bytes = totalBytes - off;
+    DWORD bytes = span - off < FDS_PAGE_SIZE ? span - off : FDS_PAGE_SIZE;
 
-    if (bytes)
+    /* The file always holds a full page; the part past span is padding. */
+    BYTE chunk[256];
+    for (DWORD done = 0; done < FDS_PAGE_SIZE; done += sizeof(chunk))
     {
-      if (f_read(&fds_sidecar_fil, fds_expanded + off, bytes, &br) != FR_OK ||
-          br != bytes)
+      if (f_read(fil, chunk, sizeof(chunk), &br) != FR_OK || br != sizeof(chunk))
       {
-        f_close(&fds_sidecar_fil);
-        return false;
+        f_close(fil);
+        return 0;
       }
-      fdsMarkDirty(off);
-    }
-    if (bytes < FDS_PAGE_SIZE)
-    {
-      BYTE skip[64];
-      DWORD remain = FDS_PAGE_SIZE - bytes;
-      while (remain)
+      if (done < bytes)
       {
-        DWORD chunk = remain < sizeof(skip) ? remain : sizeof(skip);
-        if (f_read(&fds_sidecar_fil, skip, chunk, &br) != FR_OK) { f_close(&fds_sidecar_fil); return false; }
-        remain -= chunk;
+        DWORD n = bytes - done < sizeof(chunk) ? bytes - done : sizeof(chunk);
+        if (!fdsDiskWriteRange(base + off + done, chunk, n))
+        {
+          printf("FDS sidecar: out of memory loading %s, it will not be overwritten.\n", filePath);
+          fds_sidecar_incomplete = true;
+          f_close(fil);
+          return 0;
+        }
       }
     }
     ++loaded;
   }
-  f_close(&fds_sidecar_fil);
+  f_close(fil);
   printf("FDS sidecar: applied %d dirty page(s) from %s\n", loaded, filePath);
-  return true;
+  return 1;
 }
 
-static bool fdsSaveSidecarToFile(const char *filePath, int storedSideCount)
+static bool fdsSaveSidecarToFile(FIL *fil, const char *filePath)
 {
-  if (!IsFDS || !fds_expanded || !filePath) return false;
-  if (!fdsHasDirtyPages())
-  {
-    printf("FDS sidecar: no dirty pages, skipping write of %s.\n", filePath);
-    return true;
-  }
-
   int numPages = fdsTotalPages();
   int bmBytes  = (numPages + 7) / 8;
 
-  FRESULT fr = f_open(&fds_sidecar_fil, filePath, FA_CREATE_ALWAYS | FA_WRITE);
+  FRESULT fr = f_open(fil, filePath, FA_CREATE_ALWAYS | FA_WRITE);
   if (fr != FR_OK)
   {
     printf("FDS sidecar: cannot open %s for write (%d)\n", filePath, fr);
@@ -925,30 +1113,27 @@ static bool fdsSaveSidecarToFile(const char *filePath, int storedSideCount)
     FDS_SIDECAR_MAGIC0, FDS_SIDECAR_MAGIC1,
     FDS_SIDECAR_MAGIC2, FDS_SIDECAR_MAGIC3,
     FDS_SIDECAR_VERSION,
-    (BYTE)storedSideCount,
+    (BYTE)FDS_NumSides,
     (BYTE)bmBytes,
     0
   };
   UINT bw = 0;
-  if (f_write(&fds_sidecar_fil, hdr, sizeof(hdr), &bw) != FR_OK || bw != sizeof(hdr)) goto fail;
-  if (f_write(&fds_sidecar_fil, fds_dirty_bitmap, bmBytes, &bw) != FR_OK || bw != (UINT)bmBytes) goto fail;
+  if (f_write(fil, hdr, sizeof(hdr), &bw) != FR_OK || bw != sizeof(hdr)) goto fail;
+  if (f_write(fil, fds_dirty_bitmap, bmBytes, &bw) != FR_OK || bw != (UINT)bmBytes) goto fail;
 
   {
-    DWORD totalBytes = fds_expanded_total_size;
+    DWORD totalBytes = fds_disk_total_size;
     int saved = 0;
     for (int p = 0; p < numPages; ++p)
     {
       if (!fdsPageDirty((unsigned)p)) continue;
       DWORD off = (DWORD)p * FDS_PAGE_SIZE;
       DWORD bytes = FDS_PAGE_SIZE;
-      if (off >= totalBytes) bytes = 0;
-      else if (off + bytes > totalBytes) bytes = totalBytes - off;
+      if (off + bytes > totalBytes) bytes = totalBytes - off;
+      /* A dirty page is always resident in the copy-on-write image. */
+      const BYTE *data = fds_expanded ? fds_expanded + off : fds_pages[p];
 
-      if (bytes)
-      {
-        if (f_write(&fds_sidecar_fil, fds_expanded + off, bytes, &bw) != FR_OK ||
-            bw != bytes) goto fail;
-      }
+      if (f_write(fil, data, bytes, &bw) != FR_OK || bw != bytes) goto fail;
       if (bytes < FDS_PAGE_SIZE)
       {
         static const BYTE zeros[64] = {0};
@@ -956,63 +1141,22 @@ static bool fdsSaveSidecarToFile(const char *filePath, int storedSideCount)
         while (remain)
         {
           DWORD chunk = remain < sizeof(zeros) ? remain : sizeof(zeros);
-          if (f_write(&fds_sidecar_fil, zeros, chunk, &bw) != FR_OK || bw != chunk) goto fail;
+          if (f_write(fil, zeros, chunk, &bw) != FR_OK || bw != chunk) goto fail;
           remain -= chunk;
         }
       }
       ++saved;
     }
-    f_close(&fds_sidecar_fil);
+    f_close(fil);
     printf("FDS sidecar: wrote %d dirty page(s) to %s\n", saved, filePath);
     return true;
   }
 
 fail:
   printf("FDS sidecar: write failed for %s\n", filePath);
-  f_close(&fds_sidecar_fil);
+  f_close(fil);
   return false;
 }
-
-/*-------------------------------------------------------------------*/
-/*  fdsRebuildForSide: flush dirty pages for the current side, then  */
-/*  re-expand a different side from the raw disk image. Only used in */
-/*  single-side mode (no PSRAM). No-op in multi-side mode.           */
-/*-------------------------------------------------------------------*/
-static bool fdsRebuildForSide(int newSide)
-{
-  if (!fds_single_side_mode) return true;
-  if (fds_expanded_side == newSide) return true;
-  if (!fds_expanded || !FDS_DiskImage) return false;
-
-  printf("FDS rebuild: save dirty pages for side %d\n", fds_expanded_side);
-  if (fds_save_base[0] && fdsHasDirtyPages())
-  {
-    snprintf(fds_sidecar_path, sizeof(fds_sidecar_path),
-             "%s_s%d.SAV", fds_save_base, fds_expanded_side);
-    fdsSaveSidecarToFile(fds_sidecar_path, 1);
-  }
-  fdsClearDirtyBitmap();
-
-  printf("FDS rebuild: expanding side %d\n", newSide);
-  memset(fds_expanded, 0, FDS_PER_SIDE_MAX);
-  fds_side_offsets[newSide] = 0;
-  fdsExpandOneSide(FDS_DiskImage, newSide, fds_expanded, 0);
-  fds_expanded_side = newSide;
-  fds_expanded_total_size = FDS_PER_SIDE_MAX;
-
-  if (fds_save_base[0])
-  {
-    printf("FDS rebuild: loading sidecar for side %d\n", newSide);
-    snprintf(fds_sidecar_path, sizeof(fds_sidecar_path),
-             "%s_s%d.SAV", fds_save_base, newSide);
-    fdsLoadSidecarFromFile(fds_sidecar_path, 1);
-  }
-
-  printf("FDS: rebuilt expanded buffer for side %d\n", newSide);
-  return true;
-}
-
-#endif
 
 static void fdsCompleteSideSwitch(int newSide)
 {
@@ -1024,67 +1168,54 @@ static void fdsCompleteSideSwitch(int newSide)
   fds_transfer_complete = 0;
 }
 
-#if PICO_RP2350
-void fdsCheckPendingRebuild()
-{
-  int side = fds_rebuild_pending_side;
-  if (side < 0) return;
-  fds_rebuild_pending_side = -1;
-  printf("FDS: deferred rebuild starting for side %d (from side %d)\n",
-         side, fds_expanded_side);
-  fdsRebuildForSide(side);
-  printf("FDS: deferred rebuild complete, switching to side %d\n", side);
-  fdsCompleteSideSwitch(side);
-}
-#endif
-
 /*-------------------------------------------------------------------*/
-/*  Public sidecar API. basePath is the path stem without extension   */
-/*  (e.g. "/saves/game_fds"). Multi-side mode appends ".SAV";        */
-/*  single-side mode appends "_s0.SAV", "_s1.SAV", etc.              */
+/*  Public sidecar API. basePath is the path stem without extension  */
+/*  (e.g. "/saves/game_fds"); the file is basePath + ".SAV".         */
 /*-------------------------------------------------------------------*/
-
-void fdsSetSaveBasePath(const char *basePath)
-{
-  if (basePath)
-    strncpy(fds_save_base, basePath, FDS_SAVE_BASE_LEN - 1);
-  fds_save_base[FDS_SAVE_BASE_LEN - 1] = '\0';
-}
 
 bool fdsLoadSidecar(const char *basePath)
 {
-#if !PICO_RP2350
-  (void)basePath;
-  return false;
-#else
-  if (basePath) fdsSetSaveBasePath(basePath);
-  if (fds_single_side_mode)
+  if (!IsFDS || !basePath) return false;
+  fds_sidecar_incomplete = false;
+
+  char path[FDS_PATH_MAX];
+  FIL *fil = (FIL *)Frens::f_malloc(sizeof(FIL));
+  if (!fil) return false;
+  snprintf(path, sizeof(path), "%s.SAV", basePath);
+  if (fdsApplySidecar(fil, path, FDS_NumSides, 0, fds_disk_total_size) == FDS_SIDECAR_ABSENT)
   {
-    snprintf(fds_sidecar_path, sizeof(fds_sidecar_path),
-             "%s_s%d.SAV", basePath, FDS_CurrentSide);
-    return fdsLoadSidecarFromFile(fds_sidecar_path, 1);
+    /* Saves from builds that kept one file per side. They are read once;
+       the next save writes everything to basePath.SAV. */
+    for (int s = 0; s < FDS_NumSides && !fds_sidecar_incomplete; ++s)
+    {
+      snprintf(path, sizeof(path), "%s_s%d.SAV", basePath, s);
+      fdsApplySidecar(fil, path, 1, fds_side_offsets[s], FDS_PER_SIDE_MAX);
+    }
   }
-  snprintf(fds_sidecar_path, sizeof(fds_sidecar_path), "%s.SAV", basePath);
-  return fdsLoadSidecarFromFile(fds_sidecar_path, FDS_NumSides);
-#endif
+  Frens::f_free(fil);
+  return true;
 }
 
 bool fdsSaveSidecar(const char *basePath)
 {
-#if !PICO_RP2350
-  (void)basePath;
-  return false;
-#else
-  if (basePath) fdsSetSaveBasePath(basePath);
-  if (fds_single_side_mode)
+  if (!IsFDS || !basePath) return false;
+  if (fds_sidecar_incomplete)
   {
-    snprintf(fds_sidecar_path, sizeof(fds_sidecar_path),
-             "%s_s%d.SAV", basePath, FDS_CurrentSide);
-    return fdsSaveSidecarToFile(fds_sidecar_path, 1);
+    printf("FDS sidecar: saved data was not loaded completely, not overwriting it.\n");
+    return false;
   }
-  snprintf(fds_sidecar_path, sizeof(fds_sidecar_path), "%s.SAV", basePath);
-  return fdsSaveSidecarToFile(fds_sidecar_path, FDS_NumSides);
-#endif
+  if (!fdsHasDirtyPages())
+  {
+    printf("FDS sidecar: no dirty pages, skipping write of %s.SAV.\n", basePath);
+    return true;
+  }
+  char path[FDS_PATH_MAX];
+  FIL *fil = (FIL *)Frens::f_malloc(sizeof(FIL));
+  if (!fil) return false;
+  snprintf(path, sizeof(path), "%s.SAV", basePath);
+  bool ok = fdsSaveSidecarToFile(fil, path);
+  Frens::f_free(fil);
+  return ok;
 }
 
 /*-------------------------------------------------------------------*/
@@ -1117,9 +1248,9 @@ void fdsAutoInsertCheck()
     if (addr < 0x2000)
       buffer[i] = RAM[addr & 0x7FF];
     else if (addr >= 0x6000 && addr < 0x8000)
-      buffer[i] = FDS_PrgRam ? FDS_PrgRam[addr - 0x6000] : 0;
+      buffer[i] = SRAM[addr - 0x6000];
     else if (addr >= 0x8000 && addr < 0xE000)
-      buffer[i] = FDS_PrgRam ? FDS_PrgRam[(addr - 0x8000) + 0x2000] : 0;
+      buffer[i] = FDS_PrgRam ? FDS_PrgRam[addr - 0x8000] : 0;
     else if (addr >= 0xE000)
       buffer[i] = FDS_Bios ? FDS_Bios[addr & 0x1FFF] : 0;
     else
@@ -1175,11 +1306,7 @@ void fdsAutoInsertCheck()
   if (matchIndex >= 0 && matchIndex != FDS_CurrentSide)
   {
     /* Switch to the matched side. */
-    if (fds_single_side_mode) {
-      fds_rebuild_pending_side = matchIndex;
-    } else {
-      fdsCompleteSideSwitch(matchIndex);
-    }
+    fdsCompleteSideSwitch(matchIndex);
     /* Cancel retry timer — we found the right disk. */
     fds_auto_retry_counter = -1;
     fds_auto_eject_delay = -1;
@@ -1618,6 +1745,22 @@ BYTE fdsApuRead(WORD wAddr)
     if (wAddr == 0x4092)
       return ((BYTE)(wAddr >> 8) & 0xC0) | (fds_mod_gain & 0x3F);
 
+    /* JMP $E6E3 for the patched BIOS header check (see FDS_HOOK_ADDR).
+       Only the opcode fetch runs the check, not a data read of $5FF0.
+       The JMP is the emulator's, not the BIOS's, so its 3 cycles are
+       handed back to keep the game's timing unchanged. */
+    if (fds_hook_patched && (WORD)(wAddr - FDS_HOOK_ADDR) < 3)
+    {
+      if (wAddr == FDS_HOOK_ADDR)
+      {
+        if (PC != FDS_HOOK_ADDR + 1) return 0x4C;
+        g_wPassedClocks -= 3;
+        fdsAutoInsertCheck();
+        return 0x4C;
+      }
+      return wAddr == FDS_HOOK_ADDR + 1 ? 0xE3 : 0xE6;
+    }
+
     return (BYTE)(wAddr >> 8); /* open bus */
   }
 }
@@ -1639,7 +1782,7 @@ BYTE fdsApuRead(WORD wAddr)
 /*    output = (waveTable[pos] * gain * volTable[masterVol]) / 1152  */
 /*  giving a 0..63 range that's then mixed via wave6 (×18 in mixer). */
 /*-------------------------------------------------------------------*/
-void __not_in_flash_func(fdsRenderAudio)(unsigned int n)
+void FDS_RAMFUNC(fdsRenderAudio)(unsigned int n)
 {
   if (!fds_wave_buffer) return;
 
@@ -1811,11 +1954,7 @@ void fdsHsync()
     if (fds_eject_counter == 0 && fds_pending_side >= 0 &&
         fds_pending_side < FDS_NumSides)
     {
-      if (fds_single_side_mode) {
-        fds_rebuild_pending_side = fds_pending_side;
-      } else {
-        fdsCompleteSideSwitch(fds_pending_side);
-      }
+      fdsCompleteSideSwitch(fds_pending_side);
       fds_pending_side = -1;
     }
   }
@@ -1832,11 +1971,7 @@ void fdsHsync()
          may still override this if the BIOS buffer requests a
          specific different side. */
       int nextSide = (fds_previous_side + 1) % FDS_NumSides;
-      if (fds_single_side_mode) {
-        fds_rebuild_pending_side = nextSide;
-      } else {
-        fdsCompleteSideSwitch(nextSide);
-      }
+      fdsCompleteSideSwitch(nextSide);
       fds_auto_retry_counter = FDS_AUTO_RETRY_FRAMES * 262;
       FDS_LOG("Auto-insert: side %d (%c) inserted\n",
               nextSide, (nextSide & 1) ? 'B' : 'A');
@@ -1901,7 +2036,7 @@ void fdsHsync()
       fds_scanning_started = 1;
   }
   else if (fds_motor_on && FDS_DiskInserted &&
-           fds_expanded && !fds_end_of_head)
+           fds_disk_total_size && !fds_end_of_head)
   {
     /* Mesen2: if(_resetTransfer && !_scanningDisk) return;
        rst=1 prevents advancement only until the drive has started
@@ -1914,9 +2049,7 @@ void fdsHsync()
     else
     {
     DWORD sideSize = fds_side_sizes[FDS_CurrentSide];
-    BYTE *side     = fds_expanded + fds_side_offsets[FDS_CurrentSide];
-    int   numBlocks = fds_block_counts[FDS_CurrentSide];
-    DWORD *bends    = fds_block_ends[FDS_CurrentSide];
+    DWORD sideBase = fds_side_offsets[FDS_CurrentSide];
 
     fds_cycle_acc += STEP_PER_SCANLINE;
     while (fds_cycle_acc >= FDS_CYC_PER_BYTE && !fds_end_of_head)
@@ -1955,7 +2088,7 @@ void fdsHsync()
            block (matching Mesen2's AddGaps).  The BIOS expects to
            read the 0x80 sync mark via polling before the IRQ-driven
            block-type byte — so we deliver it normally (no skip). */
-        BYTE diskByte = side[fds_byte_pos];
+        BYTE diskByte = fdsDiskRead(sideBase + fds_byte_pos);
         BYTE need_irq = fds_byte_irq_en;
 
         if (!fds_scan_start)
@@ -2001,8 +2134,7 @@ void fdsHsync()
           fds_transfer_complete = 1;
           fds_byte_irq_pend = 1;
         }
-        side[fds_byte_pos] = writeData;
-        fdsMarkDirty(fds_side_offsets[FDS_CurrentSide] + fds_byte_pos);
+        fdsDiskWrite(sideBase + fds_byte_pos, writeData);
         fds_byte_pos++;
         fds_gap_ended = 0;  /* Mesen2: _gapEnded=false after write */
       }
@@ -2033,13 +2165,26 @@ void fdsRelease()
 {
   if (FDS_Bios)   { Frens::f_free(FDS_Bios);   FDS_Bios   = nullptr; }
   if (FDS_PrgRam) { Frens::f_free(FDS_PrgRam); FDS_PrgRam = nullptr; }
-  if (FDS_ChrRam) { Frens::f_free(FDS_ChrRam); FDS_ChrRam = nullptr; }
   if (fds_expanded) { Frens::f_free(fds_expanded); fds_expanded = nullptr; }
-  fds_expanded_total_size = 0;
-  fds_expanded_side = -1;
-  fds_single_side_mode = false;
-  fds_rebuild_pending_side = -1;
-  fds_save_base[0] = '\0';
+  if (fds_pages)
+  {
+    unsigned numPages = (unsigned)fdsTotalPages();
+    for (unsigned p = 0; p < numPages; ++p)
+      if (fds_pages[p]) Frens::f_free(fds_pages[p]);
+    if (fds_resident_pages)
+      printf("FDS: %d disk page(s) were resident (%dK)\n",
+             fds_resident_pages, fds_resident_pages * (FDS_PAGE_SIZE >> 10));
+    Frens::f_free(fds_pages);
+    fds_pages = nullptr;
+  }
+  fds_resident_pages = 0;
+  fds_page_alloc_failed = false;
+  fds_sidecar_incomplete = false;
+  fds_disk_total_size = 0;
+  if (fds_block_starts) { Frens::f_free(fds_block_starts); fds_block_starts = nullptr; }
+  if (fds_block_ends)   { Frens::f_free(fds_block_ends);   fds_block_ends   = nullptr; }
+  fds_synth_side = -1;
+  fds_hook_patched = false;
   for (int s = 0; s < FDS_MAX_SIDES; ++s) {
     fds_side_offsets[s] = 0;
     fds_side_sizes[s]   = 0;

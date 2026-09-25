@@ -4,7 +4,7 @@
 /*                                                                   */
 /*===================================================================*/
 
-BYTE Map188_Dummy[ 0x2000 ];
+BYTE *Map188_Dummy;
 
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 188                                            */
@@ -38,7 +38,13 @@ void Map188_Init()
   /* Callback at Rendering Screen ( 1:BG, 0:Sprite ) */
   MapperRenderScreen = Map0_RenderScreen;
 
-  /* Set SRAM Banks */
+  /* Set SRAM Banks. Allocated once; InfoNES_Fin frees it. It is not SRAM:
+     the state file does not carry it, so the magic code survives a load. */
+  if ( !Map188_Dummy )
+  {
+    Map188_Dummy = (BYTE *)Frens::f_malloc( 0x2000 );
+    InfoNES_MemorySet( Map188_Dummy, 0, 0x2000 );
+  }
   SRAMBANK = Map188_Dummy;
 
   /* Set ROM Banks */

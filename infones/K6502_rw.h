@@ -294,8 +294,6 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       PPU_R0 = byData;
       PPU_Increment = (PPU_R0 & R0_INC_ADDR) ? 32 : 1;
       PPU_NameTableBank = NAME_TABLE0 + (PPU_R0 & R0_NAME_ADDR);
-      PPU_BG_Base = (PPU_R0 & R0_BG_ADDR) ? ChrBuf + 256 * 64 : ChrBuf;
-      PPU_SP_Base = (PPU_R0 & R0_SP_ADDR) ? ChrBuf + 256 * 64 : ChrBuf;
       // Sprite size and sprite pattern table feed the MMC2/MMC4 sprite-fetch
       // trigger list, so it has to be recomputed.
       SprLatchDirty = true;
@@ -382,11 +380,26 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       addr &= 0x3fff;
 
       // Write to PPU Memory
-      if (addr < 0x2000 && byVramWriteEnable)
+      if (addr < 0x2000)
       {
-        // Pattern Data
-        ChrBufUpdate |= (1 << (addr >> 10));
-        PPUBANK[addr >> 10][addr & 0x3ff] = byData;
+        // Pattern Data. A bank that points into the cartridge's CHR ROM stores
+        // nothing, and the write has to be dropped here rather than fall
+        // through to the name table branch below - that branch would store it
+        // anyway, in the CHR ROM image itself, plus a second time in the bank
+        // 4KB away. Games that clear the whole of VRAM at boot (B-Wings is one)
+        // were overwriting their own tile data with zeroes, harmless only for
+        // as long as nothing read the CHR ROM back. Mapper 185 reads it back:
+        // its copy protection compares the first bytes of the pattern table
+        // against a copy held in PRG.
+        //
+        // The test is per bank, not per cartridge: a TQROM (mapper 119) has
+        // CHR ROM and CHR RAM at once and maps either into any of the eight
+        // banks, so byVramWriteEnable alone would drop its CHR RAM writes.
+        // The cartridge-wide flag still wins, for the two mappers (74 and 77)
+        // that set it by hand on a board that has CHR ROM as well.
+        BYTE *pbyBank = PPUBANK[addr >> 10];
+        if (byVramWriteEnable || pbyBank < VROM || pbyBank >= VROMLimit)
+          pbyBank[addr & 0x3ff] = byData;
       }
       else if (addr < 0x3f00) /* 0x2000 - 0x3eff */
       {
