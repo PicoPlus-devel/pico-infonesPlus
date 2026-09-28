@@ -546,6 +546,8 @@ void Map140_Apu(WORD wAddr, BYTE byData);
 void Map151_Init();
 void Map151_Write(WORD wAddr, BYTE byData);
 
+void Map152_Init();
+
 void Map160_Init();
 void Map160_Write(WORD wAddr, BYTE byData);
 void Map160_HSync();
@@ -615,6 +617,8 @@ void Map202_WriteSub(WORD wAddr, BYTE byData);
 
 void Map206_Init();
 void Map206_Write(WORD wAddr, BYTE byData);
+
+void Map207_Init();
 
 void Map208_Init();
 void Map208_Write(WORD wAddr, BYTE byData);

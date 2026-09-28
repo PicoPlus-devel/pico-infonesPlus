@@ -22,6 +22,16 @@ Two things to keep in mind: `FLASH_QE_SET_1.uf2` must not be applied twice (reco
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
+# v0.53
+
+## New
+
+- Mappers 152 and 207 are now supported: Saint Seiya - Ougon Densetsu, Arkanoid II, Gegege no Kitarou 2, Pocket Zaurus and newer dumps of Fudou Myouou Den.
+
+## Fixes
+
+- Kyonshiizu 2, Mirai Shinwa Jarvas, Kyuukyoku Harikiri Stadium, Kamen Rider Club and Family Trainer 6 showed garbled or misplaced backgrounds.
+
 # v0.52
 
 ## New
