@@ -31,6 +31,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 ## Fixes
 
 - Kyonshiizu 2, Mirai Shinwa Jarvas, Kyuukyoku Harikiri Stadium, Kamen Rider Club and Family Trainer 6 showed garbled or misplaced backgrounds.
+- Gegege no Kitarou 2: the title did not rise out of the sea and the screen flickered.
 
 ## Known issues
 

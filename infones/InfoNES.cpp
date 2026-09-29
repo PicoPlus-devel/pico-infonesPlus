@@ -1182,11 +1182,19 @@ int __not_in_flash_func(InfoNES_HSync)()
   /*-------------------------------------------------------------------*/
   // Refactored from a switch into if/else because SCAN_VBLANK_START is now a
   // runtime value (region-dependent: 241 for NTSC/PAL, 291 for Dendy).
-  if (PPU_Scanline == SCAN_TOP_OFF_SCREEN)
+  if (PPU_Scanline == SCAN_VBLANK_END)
   {
-    // Reset a PPU status
+    // The pre-render line. The PPU clears the vblank, sprite 0 and overflow
+    // flags at its first dot, not at the start of the next frame. Gegege no
+    // Kitarou 2 waits for the sprite 0 flag to drop and then writes the
+    // vertical scroll, which only counts if it lands on this line: the end
+    // of this line copies the scroll for the frame (PPU_Addr = PPU_Temp
+    // above). Cleared at line 0, the flag dropped a line late and the title
+    // screen lost its scroll.
     PPU_R2 = 0;
-
+  }
+  else if (PPU_Scanline == SCAN_TOP_OFF_SCREEN)
+  {
     // Set up a character data
     if (NesHeader.byVRomSize == 0 && FrameCnt == 0)
       InfoNES_SetupChr();
