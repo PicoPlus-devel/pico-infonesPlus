@@ -580,6 +580,15 @@ int InfoNES_Reset()
     ROM_SRAM = NesHeader.byInfo1 & 2;
     ROM_Trainer = NesHeader.byInfo1 & 4;
     ROM_FourScr = NesHeader.byInfo1 & 8;
+
+    // Famicom Jump II, the Datach games and some 24C01 boards are usually
+    // dumped as mapper 16 (see Map16_Remap)
+    if (MapperNo == 16)
+    {
+      MapperNo = Map16_Remap();
+      if (MapperNo != 16)
+        SubMapperNo = 0;
+    }
   }
 
   /*-------------------------------------------------------------------*/

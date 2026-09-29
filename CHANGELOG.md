@@ -1,8 +1,7 @@
 # CHANGELOG
 
-Famicom Disk System games now also run on RP2040 boards.
-New **Overscan fix in menu** setting for TVs that cut off the edges of the menu.
-Optimized memory usage on RP2040 boards, freeing up about 57 KB of RAM.
+More games now run, among them Famicom Jump II, Devil Man, Saint Seiya - Ougon Densetsu, the Datach games and Super Mario Bros. + Tetris + Nintendo World Cup.
+Garbled backgrounds fixed in Kyonshiizu 2 and several other games.
 
 # General Info
 
@@ -27,10 +26,15 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 ## New
 
 - Mappers 152 and 207 are now supported: Saint Seiya - Ougon Densetsu, Arkanoid II, Gegege no Kitarou 2, Pocket Zaurus and newer dumps of Fudou Myouou Den.
+- Mappers 37, 153, 154, 155, 157, 159 and 268 are now supported: Super Mario Bros. + Tetris + Nintendo World Cup, Famicom Jump II, Devil Man, the Datach games, SD Gundam Gaiden - Knight Gundam Monogatari, Magical Taruruuto-kun, Dragon Ball Z - Kyoushuu! Saiya Jin and several unlicensed games. Saving works in the games that have it ([#253](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/253)).
 
 ## Fixes
 
 - Kyonshiizu 2, Mirai Shinwa Jarvas, Kyuukyoku Harikiri Stadium, Kamen Rider Club and Family Trainer 6 showed garbled or misplaced backgrounds.
+
+## Known issues
+
+- Datach games: scanning barcode cards is not supported.
 
 # v0.52
 
