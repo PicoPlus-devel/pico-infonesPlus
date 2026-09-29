@@ -1,7 +1,7 @@
 # CHANGELOG
 
 More games now run, among them Famicom Jump II, Devil Man, Saint Seiya - Ougon Densetsu, the Datach games and Super Mario Bros. + Tetris + Nintendo World Cup.
-Garbled backgrounds fixed in Kyonshiizu 2 and several other games.
+Garbled backgrounds fixed in Kyonshiizu 2, Bible Buffet and several other games.
 
 # General Info
 
@@ -32,6 +32,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 
 - Kyonshiizu 2, Mirai Shinwa Jarvas, Kyuukyoku Harikiri Stadium, Kamen Rider Club and Family Trainer 6 showed garbled or misplaced backgrounds.
 - Gegege no Kitarou 2: the title did not rise out of the sea and the screen flickered.
+- Bible Buffet, Spiritual Warfare, Joshua, King of Kings and Sunday Funday showed garbled graphics or a black screen. Also fixed: Wally Bear and the No! Gang, Galactic Crusader and Mission Cobra.
 
 ## Known issues
 
