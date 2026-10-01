@@ -143,14 +143,10 @@ extern "C" FRESULT f_mkdir(const char *path)
     return FR_DENIED;
 }
 
-// --- Audio callback no-ops ----------------------------------------------
+// --- Audio callback no-ops (the output side is in host_main.cpp) ---------
 void InfoNES_SoundInit(void) {}
 int  InfoNES_SoundOpen(int /*samples_per_sync*/, int /*sample_rate*/) { return 0; }
 void InfoNES_SoundClose(void) {}
-int  InfoNES_GetSoundBufferSize() { return 0; }
-void InfoNES_SoundOutput(int /*samples*/,
-                         BYTE * /*w1*/, BYTE * /*w2*/, BYTE * /*w3*/,
-                         BYTE * /*w4*/, BYTE * /*w5*/, BYTE * /*w6*/) {}
 
 // --- Messaging ----------------------------------------------------------
 void InfoNES_DebugPrint(const char *msg) { fputs(msg, stdout); fputc('\n', stdout); }

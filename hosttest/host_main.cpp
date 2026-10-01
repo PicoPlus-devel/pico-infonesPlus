@@ -1,7 +1,14 @@
 // Host harness: run the InfoNES core headless on Linux, dump frames as PPM.
 // Usage: nes_host <rom.nes|rom.fds> <frames> <dump-every> [outdir]
+//        NES_LIVE=1 nes_host <rom.nes|rom.fds> [frames] [dump-every] [outdir]
 // See README.md for env-var controls (input injection, region override,
 // VRAM/register dumps, BIOS path for FDS).
+//
+// NES_LIVE=1 (when built with SDL2) shows the frames in a window, plays the
+// audio and reads the keyboard as controller 1, paced to real time
+// (host_sdl.cpp). NES_PAD_REC=<file> records the pads per frame and
+// NES_PAD_PLAY=<file> replays them, so a live session reproduces exactly in a
+// headless run.
 //
 // Driving model
 // -------------
@@ -24,8 +31,10 @@
 #include <cstdint>
 #include <cstdarg>
 #include <cctype>
+#include <climits>
 #include <sys/stat.h>
 #include <string>
+#include <vector>
 
 #include "InfoNES.h"
 #include "InfoNES_Mapper.h"
@@ -34,6 +43,9 @@
 #include "InfoNES_FDS.h"
 #include "FrensHelpers.h"
 #include "state.h"
+#if HOST_SDL
+#include "host_sdl.h"
+#endif
 
 // The real FrensHelpers.h declares this; the device build sets it from the
 // flash-loaded ROM address. We own it on host and point it at the in-memory
@@ -105,18 +117,43 @@ static struct {
     std::string state_path; // file the two above use
     KeyEvent keys[32];
     int keys_n;
+    KeyEvent keys2[32];     // NES_PRESS_KEYS2: controller 2
+    int keys2_n;
     KeyEvent fds_swaps[8];  // NES_FDS_SWAP: mask holds the side
     int fds_swaps_n;
+    int live;               // NES_LIVE: window, audio and keyboard
 } cfg;
 
 static int      g_frame      = 0;
 static bool     g_quit       = false;
 static uint8_t  g_pad1_mask  = 0;
 static uint8_t  g_pad2_mask  = 0;
+static FILE    *g_audio_out  = nullptr;   // NES_AUDIO_OUT
+static std::vector<int16_t> g_live_audio; // this frame's samples, for the window
+#if HOST_SDL
+static uint8_t  g_live_pad   = 0;         // keyboard, controller 1
+static bool     g_live_quit  = false;
+#endif
 
 // ----------------------------------------------------------------------
-// PPM writer — centre 256 cols of the 320-wide framebuffer.
+// Frame pixels — centre 256 cols of the 320-wide framebuffer.
 // ----------------------------------------------------------------------
+constexpr int FRAME_W = 256, FRAME_H = 240;
+
+// Unpack exactly like the device's CC() macro in main.cpp reads these table
+// entries: red bits 11-14, green bits 6-9, blue bits 1-4, i.e. the RGB444
+// the picoDVI path actually emits. Bit 15 is the emulator's backdrop marker
+// (PalTable | 0x8000) and is ignored here, exactly as the display hardware
+// ignores it. Returns 0x00RRGGBB; the PPM dump and the live window both use
+// it, so they always show the same pixels.
+static inline uint32_t frame_pixel(int x, int y)
+{
+    const uint16_t p = Frens::framebuffer[y * SCREENWIDTH + 32 + x];
+    return (uint32_t)(((p >> 11) & 0xF) * 17) << 16 |
+           (uint32_t)(((p >>  6) & 0xF) * 17) <<  8 |
+           (uint32_t)(((p >>  1) & 0xF) * 17);
+}
+
 static void dump_ppm(int frame)
 {
     char path[512];
@@ -125,26 +162,109 @@ static void dump_ppm(int frame)
     FILE *f = fopen(path, "wb");
     if (!f) { perror(path); return; }
 
-    constexpr int W = 256, H = 240;
-    fprintf(f, "P6\n%d %d\n255\n", W, H);
-    for (int y = 0; y < H; y++) {
-        const WORD *src = &Frens::framebuffer[y * SCREENWIDTH + 32];
-        for (int x = 0; x < W; x++) {
-            uint16_t p = src[x];
-            // Unpack exactly like the device's CC() macro in main.cpp reads
-            // these table entries: red bits 11-14, green bits 6-9, blue bits
-            // 1-4, i.e. the RGB444 the picoDVI path actually emits. Bit 15 is
-            // the emulator's backdrop marker (PalTable | 0x8000) and is
-            // ignored here, exactly as the display hardware ignores it.
-            uint8_t rgb[3] = {
-                (uint8_t)(((p >> 11) & 0xF) * 17),
-                (uint8_t)(((p >>  6) & 0xF) * 17),
-                (uint8_t)(((p >>  1) & 0xF) * 17),
-            };
+    fprintf(f, "P6\n%d %d\n255\n", FRAME_W, FRAME_H);
+    for (int y = 0; y < FRAME_H; y++) {
+        for (int x = 0; x < FRAME_W; x++) {
+            const uint32_t c = frame_pixel(x, y);
+            uint8_t rgb[3] = { (uint8_t)(c >> 16), (uint8_t)(c >> 8), (uint8_t)c };
             fwrite(rgb, 1, 3, f);
         }
     }
     fclose(f);
+}
+
+// ----------------------------------------------------------------------
+// Input record / replay (NES_PAD_REC / NES_PAD_PLAY).
+// A recording is everything the machine was fed from outside: both pads per
+// frame, as text, one line per change:
+//     <frame> <pad1> [<pad2>]   hex masks from this frame on (pad2 default 00)
+//     <frame> end               the recording stopped before this frame
+// '#' starts a comment. Frames never decrease. Written by NES_PAD_REC from
+// the effective pads (keyboard | scripted input); read by NES_PAD_PLAY,
+// which replaces keyboard and scripted input until "end". A file without
+// "end" (written by hand) never ends: its last masks persist.
+// ----------------------------------------------------------------------
+struct PadEvent { int frame; bool end; uint8_t pad1, pad2; };
+
+static std::vector<PadEvent> g_play;
+static size_t   g_play_i     = 0;
+static bool     g_playing    = false;
+static uint8_t  g_play_pad1  = 0;
+static uint8_t  g_play_pad2  = 0;
+static FILE    *g_rec        = nullptr;
+static int      g_rec_last   = 0;       // last recorded pad1 | pad2 << 8
+
+static bool pad_play_load(const char *path)
+{
+    FILE *fp = fopen(path, "r");
+    if (!fp) { perror(path); return false; }
+    char line[512];
+    unsigned ln = 0;
+    int last = 0;
+    while (fgets(line, sizeof line, fp)) {
+        char *p = line, *e;
+        ln++;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '#' || *p == '\n' || *p == '\r' || !*p) continue;
+        PadEvent ev = { (int)strtol(p, &e, 10), false, 0, 0 };
+        if (e == p) {
+            fprintf(stderr, "%s:%u: expected a frame number\n", path, ln);
+            fclose(fp);
+            return false;
+        }
+        while (*e == ' ' || *e == '\t') e++;
+        if (!strncmp(e, "end", 3)) {
+            ev.end = true;
+        } else {
+            char *e2;
+            ev.pad1 = (uint8_t)strtoul(e, &e2, 16);
+            if (e2 == e) {
+                fprintf(stderr, "%s:%u: expected a hex pad mask or \"end\"\n", path, ln);
+                fclose(fp);
+                return false;
+            }
+            ev.pad2 = (uint8_t)strtoul(e2, nullptr, 16);
+        }
+        if (ev.frame < last) {
+            fprintf(stderr, "%s:%u: frame %d comes after frame %d\n", path, ln,
+                    ev.frame, last);
+            fclose(fp);
+            return false;
+        }
+        last = ev.frame;
+        g_play.push_back(ev);
+    }
+    fclose(fp);
+    printf("PAD_PLAY: %zu events from %s, last at frame %d\n", g_play.size(), path, last);
+    return true;
+}
+
+static bool pad_rec_open(const char *path, const char *rom_path)
+{
+    // Settings that change the machine must match on replay; list the ones
+    // that are set so the replay command can be rebuilt from the file.
+    static const char *const machine_env[] = {
+        "NES_REGION", "NES_NO_PSRAM", "NES_NO_SPRITE_LIMIT", "NES_FDS_DISK_SIDE",
+        "NES_FDS_SWAP", "NES_FDS_SAVE", "NES_SAVE_STATE", "NES_LOAD_STATE",
+        "NES_STATE_PATH", "NES_FAT_ROOT", "ASAN_OPTIONS",
+    };
+    g_rec = fopen(path, "w");
+    if (!g_rec) { perror(path); return false; }
+    fprintf(g_rec, "# pico-infonesPlus host-harness input recording\n");
+    fprintf(g_rec, "# rom: %s\n", rom_path);
+    for (const char *name : machine_env)
+        if (getenv(name))
+            fprintf(g_rec, "# env: %s=%s\n", name, getenv(name));
+    fprintf(g_rec, "# <frame> <pad1> <pad2> | <frame> end\n");
+    return true;
+}
+
+static void pad_rec_close(int frames_run)
+{
+    if (!g_rec) return;
+    fprintf(g_rec, "%d end\n", frames_run);
+    fclose(g_rec);
+    g_rec = nullptr;
 }
 
 // ----------------------------------------------------------------------
@@ -191,6 +311,7 @@ static void parse_frame_list(const char *env, KeyEvent *out, int max, int *n)
 static void parse_keys_env()
 {
     parse_frame_list("NES_PRESS_KEYS", cfg.keys, 32, &cfg.keys_n);
+    parse_frame_list("NES_PRESS_KEYS2", cfg.keys2, 32, &cfg.keys2_n);
     parse_frame_list("NES_FDS_SWAP", cfg.fds_swaps, 8, &cfg.fds_swaps_n);
 }
 
@@ -271,6 +392,37 @@ void InfoNES_PostDrawLine(int /*line*/)
     // Nothing to do — line already lives in Frens::framebuffer.
 }
 
+#if HOST_SDL
+// Live mode: show the frame just rendered, read the keyboard for the next
+// one and wait until it is due. While paused this keeps polling, so F12
+// still dumps the frame on screen and N runs exactly one more.
+static void live_frame()
+{
+    static uint32_t px[FRAME_W * FRAME_H];
+    for (int y = 0; y < FRAME_H; y++)
+        for (int x = 0; x < FRAME_W; x++)
+            px[y * FRAME_W + x] = frame_pixel(x, y);
+    hsdl_present(px);
+    for (;;) {
+        int ev = 0;
+        g_live_pad = hsdl_poll(&ev);
+        if (ev & HSDL_EV_DUMP) {
+            dump_ppm(g_frame);
+            printf("LIVE: frame %d dumped to %s/frame_%05d.ppm\n",
+                   g_frame, cfg.outdir.c_str(), g_frame);
+            fflush(stdout);
+        }
+        if (ev & HSDL_EV_QUIT) { g_live_quit = true; return; }
+        hsdl_status(g_frame);
+        if (!hsdl_paused() || (ev & HSDL_EV_STEP)) break;
+        hsdl_idle();
+    }
+    hsdl_audio(g_live_audio.data(), (int)g_live_audio.size() / 2);
+    g_live_audio.clear();
+    hsdl_pace();
+}
+#endif
+
 int InfoNES_LoadFrame()
 {
     // Called once per frame at InfoNES.cpp:956, right before InfoNES_PadState
@@ -305,22 +457,60 @@ int InfoNES_LoadFrame()
         }
     }
 
-    // Decide input for this frame.
+#if HOST_SDL
+    if (cfg.live) live_frame();
+#endif
+
+    // Decide input for this frame. A replay supplies it until its "end"
+    // line; after that the keyboard and the scripted input take over.
+    while (g_playing && g_play_i < g_play.size() && g_play[g_play_i].frame <= g_frame) {
+        const PadEvent &ev = g_play[g_play_i++];
+        if (ev.end) {
+            g_playing = false;
+            printf("PAD_PLAY: recording ended at frame %d%s\n", g_frame,
+                   cfg.live ? ", the keyboard has control" : "");
+            fflush(stdout);
+        } else {
+            g_play_pad1 = ev.pad1;
+            g_play_pad2 = ev.pad2;
+        }
+    }
     uint8_t mask = 0;
-    if (cfg.press_start >= 0 &&
-        g_frame >= cfg.press_start && g_frame < cfg.press_start + 10)
-        mask |= 0x08;                              // START
-    if (cfg.hold_a >= 0 && g_frame >= cfg.hold_a && (g_frame & 4))
-        mask |= 0x01;                              // A
-    for (int i = 0; i < cfg.keys_n; i++) {
-        if (g_frame >= cfg.keys[i].frame &&
-            g_frame <  cfg.keys[i].frame + 10)
-            mask |= cfg.keys[i].mask;
+    uint8_t mask2 = 0;
+    if (g_playing) {
+        mask  = g_play_pad1;
+        mask2 = g_play_pad2;
+    } else {
+        if (cfg.press_start >= 0 &&
+            g_frame >= cfg.press_start && g_frame < cfg.press_start + 10)
+            mask |= 0x08;                          // START
+        if (cfg.hold_a >= 0 && g_frame >= cfg.hold_a && (g_frame & 4))
+            mask |= 0x01;                          // A
+        for (int i = 0; i < cfg.keys_n; i++) {
+            if (g_frame >= cfg.keys[i].frame &&
+                g_frame <  cfg.keys[i].frame + 10)
+                mask |= cfg.keys[i].mask;
+        }
+        for (int i = 0; i < cfg.keys2_n; i++) {
+            if (g_frame >= cfg.keys2[i].frame &&
+                g_frame <  cfg.keys2[i].frame + 10)
+                mask2 |= cfg.keys2[i].mask;
+        }
+#if HOST_SDL
+        mask |= g_live_pad;
+#endif
     }
     g_pad1_mask = mask;
-    g_pad2_mask = 0;
+    g_pad2_mask = mask2;
+    if (g_rec && (mask | mask2 << 8) != g_rec_last) {
+        fprintf(g_rec, "%d %02x %02x\n", g_frame, mask, mask2);
+        g_rec_last = mask | mask2 << 8;
+    }
 
     if (g_frame >= cfg.total_frames) g_quit = true;
+#if HOST_SDL
+    if (g_live_quit) g_quit = true;
+#endif
     g_frame++;
     return 0;
 }
@@ -335,6 +525,42 @@ void InfoNES_PadState(DWORD *pad1, DWORD *pad2, DWORD *sys)
                g_frame, g_pad1_mask, (unsigned)PAD1_Bit);
 }
 
+// The APU renders its samples per scanline, as many as this returns room
+// for. Rendering is part of the emulated machine: the DMC fetches its sample
+// bytes and runs out while rendering, and the APU register writes of the
+// scanline are applied then. So it is on only when something consumes the
+// sound (live window, NES_AUDIO_OUT) and for input record and replay, which
+// must run the machine the same way. A plain headless run does not render,
+// as before.
+static bool g_sound_on = false;
+
+int InfoNES_GetSoundBufferSize() { return g_sound_on ? 4096 : 0; }
+
+// Mixed like the device's InfoNES_SoundOutput in main.cpp: the same channel
+// weights, DC blocker and default DVI gain (DVI_AUDIO_GAIN_Q8, 4x), as
+// 44.1 kHz s16 stereo. The live window gets one video frame of it at a time
+// (live_frame), so its pacing works on whole frames.
+void InfoNES_SoundOutput(int samples, BYTE *w1, BYTE *w2, BYTE *w3,
+                         BYTE *w4, BYTE *w5, BYTE *w6)
+{
+    if (!cfg.live && !g_audio_out) return;
+    static int32_t dc;                      // L and R are the same mix
+    static std::vector<int16_t> buf;        // a scanline has about three
+    buf.resize((size_t)samples * 2);
+    for (int i = 0; i < samples; i++) {
+        const int raw = w1[i] * 6 + w2[i] * 3 + w3[i] * 5 + w4[i] * 51 + w5[i] * 80 +
+                        (w6 ? w6[i] : 0) * 18;
+        dc += (raw - dc) >> 10;
+        int v = (raw - dc) * 2 * 1024 >> 8;
+        v = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
+        buf[2 * i] = buf[2 * i + 1] = (int16_t)v;
+    }
+    if (g_audio_out)
+        fwrite(buf.data(), sizeof(int16_t), buf.size(), g_audio_out);
+    if (cfg.live)
+        g_live_audio.insert(g_live_audio.end(), buf.begin(), buf.end());
+}
+
 int InfoNES_Menu() { return 0; }   // skip menu, start emulation
 
 int InfoNES_ReadRom(const char * /*name*/) { return -1; }
@@ -345,15 +571,26 @@ void InfoNES_ReleaseRom() {}
 // =====================================================================
 int main(int argc, char **argv)
 {
-    if (argc < 4) {
+    cfg.live = get_env_int("NES_LIVE", 0);
+#if !HOST_SDL
+    if (cfg.live) {
+        fprintf(stderr, "%s: built without SDL2, so NES_LIVE=1 is not available.\n"
+                "Install libsdl2-dev and rerun hosttest/build.sh.\n", argv[0]);
+        return 2;
+    }
+#endif
+    if (argc < (cfg.live ? 2 : 4)) {
         fprintf(stderr,
-                "usage: %s <rom.nes|rom.fds> <frames> <dump-every> [outdir]\n",
-                argv[0]);
+                "usage: %s <rom.nes|rom.fds> <frames> <dump-every> [outdir]\n"
+                "       NES_LIVE=1 %s <rom.nes|rom.fds> [frames] [dump-every] [outdir]\n",
+                argv[0], argv[0]);
         return 1;
     }
+    // Live mode defaults: the run lasts until the window is closed, and only
+    // F12 dumps a frame unless a dump-every is given.
     const char *rom_path = argv[1];
-    cfg.total_frames = atoi(argv[2]);
-    cfg.dump_every   = atoi(argv[3]);
+    cfg.total_frames = argc > 2 ? atoi(argv[2]) : INT_MAX;
+    cfg.dump_every   = argc > 3 ? atoi(argv[3]) : 0;
     cfg.outdir       = argc > 4 ? argv[4] : "hosttest/out";
     mkdir(cfg.outdir.c_str(), 0755);
 
@@ -420,13 +657,55 @@ int main(int argc, char **argv)
         fdsRequestSwap(cfg.fds_disk_side);
     }
 
-    printf("ROM %s loaded (%ld bytes, fds=%d, mapper=%u, region=%d, crc=%08X). Running %d frames.\n",
-           rom_path, size, (int)IsFDS, MapperNo, region, rom_crc, cfg.total_frames);
+    if (cfg.total_frames == INT_MAX)
+        printf("ROM %s loaded (%ld bytes, fds=%d, mapper=%u, region=%d, crc=%08X). Running until quit.\n",
+               rom_path, size, (int)IsFDS, MapperNo, region, rom_crc);
+    else
+        printf("ROM %s loaded (%ld bytes, fds=%d, mapper=%u, region=%d, crc=%08X). Running %d frames.\n",
+               rom_path, size, (int)IsFDS, MapperNo, region, rom_crc, cfg.total_frames);
+
+    // NES_PAD_PLAY replays a NES_PAD_REC recording: until the recording's
+    // "end" line it supplies all input, and the keyboard and scripted input
+    // are ignored; after it, they take over (so a live replay hands control
+    // back to you).
+    if (const char *p = getenv("NES_PAD_PLAY")) {
+        if (!pad_play_load(p)) return 1;
+        g_playing = true;
+    }
+    if (const char *p = getenv("NES_PAD_REC")) {
+        if (!pad_rec_open(p, rom_path)) return 1;
+    }
+    if (const char *p = getenv("NES_AUDIO_OUT")) {
+        g_audio_out = fopen(p, "wb");
+        if (!g_audio_out) perror(p);
+    }
+    g_sound_on = cfg.live || g_audio_out || g_playing || g_rec;
+
+#if HOST_SDL
+    if (cfg.live) {
+        // Frame period for timer pacing (no audio device). With audio the
+        // samples the APU produces per frame set the pace, which comes to
+        // the same.
+        const char *base = strrchr(rom_path, '/');
+        char title[160];
+        snprintf(title, sizeof title, "%s", base ? base + 1 : rom_path);
+        if (!hsdl_init(title, get_env_int("NES_SCALE", 3), !get_env_int("NES_MUTE", 0),
+                       InfoNES_IsPal() ? 19997 : 16639))
+            return 1;
+    }
+#endif
 
     InfoNES_Cycle();           // returns when InfoNES_PadState raises PAD_SYS_QUIT
 
+#if HOST_SDL
+    if (cfg.live) hsdl_quit();
+#endif
+    pad_rec_close(g_frame);
+    if (g_audio_out) fclose(g_audio_out);
+
     if (cfg.dump_vram) dump_vram_files();
-    dump_ppm(g_frame);         // final frame snapshot
+    if (!cfg.live)
+        dump_ppm(g_frame);     // final frame snapshot
 
     if (fds_save)
         printf("FDSSAVE save %s rc=%d\n", fds_save, (int)fdsSaveSidecar(fds_save));
