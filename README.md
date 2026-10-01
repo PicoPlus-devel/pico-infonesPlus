@@ -1121,7 +1121,7 @@ running. Not every entry is available on every board or in every situation.
 | FDS Auto Insert Disk 1 On Start | Insert disk 1 automatically at start. On by default. FDS games only. |
 | Sprite Limit (8 per line) | Draw at most 8 sprites per scanline, as the NES does. On by default. Turning it off reduces sprite flicker, but a few games rely on the limit, for example *Felix the Cat*. |
 | Overclock | Raise the CPU clock from 252 MHz to 378 MHz. Only on HSTX boards with PSRAM, and currently only needed for *Lagrange Point (JP)*. Menu only, not available in-game. |
-| Controller Test | Show a gamepad graphic that follows the controller you last pressed a button on, plus a list of connected input sources. Useful for checking wiring and button mappings. Hold SELECT + START for 2 seconds to exit. |
+| Controller Test | Show a gamepad graphic that follows the controller you last pressed a button on, plus a list of connected input sources. Useful for checking wiring and button mappings. Hold SELECT + UP for 2 seconds to exit. |
 | Enter BOOTSEL Mode | Reboot into BOOTSEL so you can flash new firmware. |
 | USB Drive Mode | Show the SD card on a computer as a USB drive, so games can be added or removed without taking the card out. See [USB drive mode](#usb-drive-mode). Menu only, not available in-game. |
 | Return to emulator selection | Go back to the emulator picker. Only present in [pico-bootLoader](#running-under-pico-bootloader) builds. |
