@@ -1308,9 +1308,6 @@ Using a USB game controller introduces some latency. The legacy controllers ((S)
 
 When starting a game, and the controller is unresponsive, you have to unplug and replug the controller to get it working. Not all controllers behave this way. I have a SNES controller that has no problems. The NES controller however must always be replugged to make it work. It is kind of hit and miss.
 
-> [!NOTE]
-> When using a SNES style USB controller, press Y to set the controller up properly. Otherwise the B button will not work. You have to do this every time you start a game or boot into the menu.
-
 
 ## XInput style controllers.
 
