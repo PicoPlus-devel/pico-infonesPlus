@@ -454,6 +454,7 @@ void InfoNES_Fin()
   if (Map185_Dummy_Chr_Rom) { Frens::f_free(Map185_Dummy_Chr_Rom); Map185_Dummy_Chr_Rom = nullptr; }
   if (Map188_Dummy) { Frens::f_free(Map188_Dummy); Map188_Dummy = nullptr; }
   if (Map16_Eeprom) { Frens::f_free(Map16_Eeprom); Map16_Eeprom = nullptr; }
+  if (Map555_Ram) { Frens::f_free(Map555_Ram); Map555_Ram = nullptr; }
   SstFlash_Release();
   MapperChrRam = nullptr; MapperChrRamSize = 0;
   MapperNtRam = nullptr; MapperNtRamSize = 0;
@@ -673,10 +674,8 @@ int InfoNES_Reset()
   // 516 -> 4, ...) and boot far enough to be playable that way, which is
   // exactly what happened before NES 2.0 was parsed at all. Fall back to the
   // 8-bit reading instead of refusing the ROM, and adopt the number so the
-  // save-state header and the on-screen mapper display agree. 555 (Nintendo
-  // Campus Challenge 1991) has nothing in common with 43 and only showed a
-  // black screen that way.
-  if (MapperTable[nIdx].nMapperNo == -1 && MapperNo > 0xff && MapperNo != 555)
+  // save-state header and the on-screen mapper display agree.
+  if (MapperTable[nIdx].nMapperNo == -1 && MapperNo > 0xff)
   {
     WORD wLegacy = MapperNo & 0xff;
     int nLegacy;
@@ -1240,6 +1239,12 @@ int __not_in_flash_func(InfoNES_HSync)()
 
     // Get the condition of the joypad
     InfoNES_PadState(&PAD1_Latch, &PAD2_Latch, &PAD_System);
+
+    // Nintendo Campus Challenge 1991 starts the competition only from
+    // controller 2, the referee's. Give it controller 1's START as well, so
+    // it can be started with one controller.
+    if (MapperNo == 555)
+      PAD2_Latch |= PAD1_Latch & 0x08;
 
     // NMI on V-Blank
     if (PPU_R0 & R0_NMI_VB)

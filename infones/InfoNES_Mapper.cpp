@@ -192,6 +192,7 @@ const struct MapperTable_tag MapperTable[] =
         {255, Map255_Init},
         {263, Map263_Init},
         {268, Map268_Init},
+        {555, Map555_Init},
         {-1, NULL}};
 
 /*-------------------------------------------------------------------*/
@@ -352,5 +353,6 @@ const struct MapperTable_tag MapperTable[] =
 #include "mapper/InfoNES_Mapper_255.cpp"
 #include "mapper/InfoNES_Mapper_263.cpp"
 #include "mapper/InfoNES_Mapper_268.cpp"
+#include "mapper/InfoNES_Mapper_555.cpp"
 
 /* End of InfoNES_Mapper.cpp */

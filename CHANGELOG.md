@@ -28,6 +28,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 - Mappers 152 and 207 are now supported: Saint Seiya - Ougon Densetsu, Arkanoid II, Gegege no Kitarou 2, Pocket Zaurus and newer dumps of Fudou Myouou Den.
 - Mappers 37, 153, 154, 155, 157, 159 and 268 are now supported: Super Mario Bros. + Tetris + Nintendo World Cup, Famicom Jump II, Devil Man, the Datach games, SD Gundam Gaiden - Knight Gundam Monogatari, Magical Taruruuto-kun, Dragon Ball Z - Kyoushuu! Saiya Jin and several unlicensed games. Saving works in the games that have it ([#250](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/250), [#253](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/253)).
 - Star Wars - The Empire Strikes Back (Limited Run Games) now runs on RP2350 boards with PSRAM.
+- Nintendo Campus Challenge 1991 (mapper 555) now runs. Press START on the title screen to begin the five-minute competition.
 
 ## Fixes
 
