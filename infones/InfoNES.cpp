@@ -673,8 +673,10 @@ int InfoNES_Reset()
   // 516 -> 4, ...) and boot far enough to be playable that way, which is
   // exactly what happened before NES 2.0 was parsed at all. Fall back to the
   // 8-bit reading instead of refusing the ROM, and adopt the number so the
-  // save-state header and the on-screen mapper display agree.
-  if (MapperTable[nIdx].nMapperNo == -1 && MapperNo > 0xff)
+  // save-state header and the on-screen mapper display agree. 555 (Nintendo
+  // Campus Challenge 1991) has nothing in common with 43 and only showed a
+  // black screen that way.
+  if (MapperTable[nIdx].nMapperNo == -1 && MapperNo > 0xff && MapperNo != 555)
   {
     WORD wLegacy = MapperNo & 0xff;
     int nLegacy;
@@ -691,7 +693,9 @@ int InfoNES_Reset()
     }
   }
 
-  if (MapperTable[nIdx].nMapperNo == -1)
+  // The Limited Run Games mapper 268 reissues bank 256KB of CHR RAM, which
+  // only an RP2350 with PSRAM has room for
+  if (MapperTable[nIdx].nMapperNo == -1 || (MapperNo == 268 && !Map268_Fits()))
   {
     // Non support mapper
     InfoNES_Error("Mapper #%d is unsupported.", MapperNo);

@@ -738,5 +738,6 @@ void Map268_Init();
 void Map268_Write(WORD wAddr, BYTE byData);
 void Map268_Sram(WORD wAddr, BYTE byData);
 void Map268_Apu(WORD wAddr, BYTE byData);
+bool Map268_Fits();
 
 #endif /* !InfoNES_MAPPER_H_INCLUDED */

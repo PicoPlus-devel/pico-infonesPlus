@@ -9,7 +9,13 @@
  * range. They set the PRG/CHR base and mask, and bit 4 of the fourth one
  * switches to a mode where the outer registers pick the pages themselves.
  * Writing the fourth with bit 7 set and bit 4 clear locks all four. The
- * bank math is Mesen2's MMC3_Coolboy, which takes it from FCEUX. */
+ * bank math is Mesen2's MMC3_Coolboy, which takes it from FCEUX.
+ *
+ * Submappers 8/9 (SMD72A, the Limited Run Games reissues) carry 256KB of
+ * CHR RAM, which only fits in PSRAM (Map268_Fits). The nesdev wiki drops
+ * the PRG offset bits above A19 for them, but The Empire Strikes Back only
+ * runs with the full COOLBOY decoding, as in Mesen. Their CHR RAM write
+ * protect (bit 5 of the first register) is not emulated. */
 
 static BYTE Map268_Ex[ 4 ];
 
@@ -226,10 +232,43 @@ static void Map268LoadBlob( BYTE *pBuf )
 }
 
 /*-------------------------------------------------------------------*/
+/*  Mapper 268 CHR RAM size                                          */
+/*-------------------------------------------------------------------*/
+/* The CHR RAM the NES 2.0 header declares (byte 11), 0 if none */
+static DWORD Map268_Chr_Ram_Size()
+{
+  if ( NesHeader.byVRomSize != 0 || ( NesHeader.byInfo2 & 0x0c ) != 0x08 )
+    return 0;
+
+  BYTE byShift = NesHeader.byReserve[ 3 ] & 0x0f;
+  return byShift ? ( 64u << byShift ) : 0;
+}
+
+/* Whether this board can hold the cartridge's CHR RAM. More than MMC3's
+   32KB (the Limited Run Games reissues bank 256KB) needs an RP2350 with
+   PSRAM; InfoNES_Reset reports the mapper as unsupported otherwise. */
+bool Map268_Fits()
+{
+  if ( Map268_Chr_Ram_Size() <= MAP4_CHR_RAM_SIZE )
+    return true;
+
+#if PICO_RP2350
+  return Frens::isPsramEnabled();
+#else
+  return false;
+#endif
+}
+
+/*-------------------------------------------------------------------*/
 /*  Initialize Mapper 268                                            */
 /*-------------------------------------------------------------------*/
 void Map268_Init()
 {
+  /* The whole CHR RAM, up to the 256KB the chip addresses */
+  DWORD dwChrRam = Map268_Chr_Ram_Size();
+  if ( dwChrRam > MAP4_CHR_RAM_SIZE )
+    Map4_Chr_Ram_Limit = ( dwChrRam > 0x40000 ) ? 0x40000 : dwChrRam;
+
   /* WRAM, the CHR RAM buffer and the scanline IRQ come from MMC3. */
   Map4_Init();
 
