@@ -53,13 +53,14 @@
 uintptr_t ROM_FILE_ADDR = 0;
 
 // ----------------------------------------------------------------------
-// NES palette — 64 entries, verbatim from the canonical table in
-// main.cpp:161-169. These are the raw pre-CC() words the picoDVI build feeds
-// to its RGB444 packing macro: red in bits 11-14, green in bits 6-9, blue in
-// bits 1-4 (the remaining low bits are dropped by CC()). dump_ppm unpacks
-// them the same way, so host frames match the picoDVI output.
+// NES palette — 64 entries: the picoDVI "Default" palette (row 0 of
+// nes_palettes.cpp, from assets/Palettes/Default DVI.pal) as RGB555 words:
+// red in bits 10-14, green in 5-9, blue in 0-4. dump_ppm keeps the top four
+// bits of each, which is the RGB444 the picoDVI build draws, so host frames
+// match the picoDVI output. Not const: the device copies the selected palette
+// into it, so InfoNES_System.h declares it writable.
 // ----------------------------------------------------------------------
-const WORD NesPalette[64] = {
+WORD NesPalette[64] = {
     0x39ce, 0x1071, 0x0015, 0x2013, 0x440e, 0x5402, 0x5000, 0x3c20,
     0x20a0, 0x0100, 0x0140, 0x00e2, 0x0ceb, 0x0000, 0x0000, 0x0000,
     0x5ef7, 0x01dd, 0x10fd, 0x401e, 0x5c17, 0x700b, 0x6ca0, 0x6521,

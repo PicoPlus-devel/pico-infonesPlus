@@ -2,6 +2,7 @@
 
 More games now run, among them Famicom Jump II, Devil Man, Saint Seiya - Ougon Densetsu, the Datach games and Super Mario Bros. + Tetris + Nintendo World Cup.
 Garbled backgrounds fixed in Kyonshiizu 2, Bible Buffet and several other games.
+The color palette can now be chosen in the settings menu.
 
 # General Info
 
@@ -29,6 +30,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 - Mappers 37, 153, 154, 155, 157, 159 and 268 are now supported: Super Mario Bros. + Tetris + Nintendo World Cup, Famicom Jump II, Devil Man, the Datach games, SD Gundam Gaiden - Knight Gundam Monogatari, Magical Taruruuto-kun, Dragon Ball Z - Kyoushuu! Saiya Jin and several unlicensed games. Saving works in the games that have it ([#250](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/250), [#253](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/253)).
 - The Limited Run Games versions of Star Wars and Star Wars - The Empire Strikes Back now run on RP2350 boards with PSRAM.
 - Nintendo Campus Challenge 1991 (mapper 555) now runs. Press START on the title screen to begin the five-minute competition.
+- Nine color palettes to choose from, under **NES Palette** in the settings menu or with START + LEFT/RIGHT during play. Includes the FirebrandX palettes and a less saturated one for LCD and OLED screens ([#256](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/256)). See [Color palettes](https://github.com/PicoPlus-devel/pico-infonesPlus#color-palettes). On the Fruit Jam these buttons no longer change the volume; use **Fruit Jam Volume Control** in the settings menu.
 
 ## Fixes
 

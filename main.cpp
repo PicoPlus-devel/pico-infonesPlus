@@ -27,6 +27,7 @@
 #include "InfoNES_FDS.h"
 #include "InfoNES_NSF.h"
 #include "zapper.h"
+#include "nes_palettes.h"
 #if EMBEDDED_NES_ROM
 extern "C" const unsigned char embedded_nes_rom[];
 extern "C" const unsigned int embedded_nes_rom_len;
@@ -112,6 +113,8 @@ int8_t g_settings_visibility_nes[MOPT_COUNT] = {
     [MOPT_SERIAL_KEYBOARD]         = 0,                    // Serial console keyboard (TI-99/4A only)
     [MOPT_SPRITE_LIMIT]            = 1,                    // 8 sprites per scanline limit (menu.cpp lists it below the FDS options)
     [MOPT_MENU_OVERSCAN]           = 0,                    // Overscan in menu (menu.cpp force-shows this below the menu colors)
+    [MOPT_GENESIS_PAD]             = 0,                    // Genesis pad type (Genesis only)
+    [MOPT_NES_PALETTE]             = 1,                    // Color palette (menu.cpp lists it after Scanline Type)
 };
 // #if defined(__riscv)
 // const uint8_t g_available_screen_modes[] = {
@@ -138,66 +141,50 @@ namespace
 // Cached Wii pad state updated once per frame in ProcessAfterFrameIsRendered()
 static uint16_t wiipad_raw_cached = 0;
 #endif
-#if 0
-#if !HSTX
-// convert RGB565 to RGB444
-#define CC(x) (((x >> 1) & 15) | (((x >> 6) & 15) << 4) | (((x >> 11) & 15) << 8))
-#else 
-// convert RGB565 to RGB555
-#define CC(x) ((((x) >> 11) & 0x1F) << 10 | (((x) >> 6) & 0x1F) << 5 | ((x) & 0x1F))
-#endif
-const WORD __not_in_flash_func(NesPalette)[64] = {
-    CC(0x39ce), CC(0x1071), CC(0x0015), CC(0x2013), CC(0x440e), CC(0x5402), CC(0x5000), CC(0x3c20),
-    CC(0x20a0), CC(0x0100), CC(0x0140), CC(0x00e2), CC(0x0ceb), CC(0x0000), CC(0x0000), CC(0x0000),
-    CC(0x5ef7), CC(0x01dd), CC(0x10fd), CC(0x401e), CC(0x5c17), CC(0x700b), CC(0x6ca0), CC(0x6521),
-    CC(0x45c0), CC(0x0240), CC(0x02a0), CC(0x0247), CC(0x0211), CC(0x0000), CC(0x0000), CC(0x0000),
-    CC(0x7fff), CC(0x1eff), CC(0x2e5f), CC(0x223f), CC(0x79ff), CC(0x7dd6), CC(0x7dcc), CC(0x7e67),
-    CC(0x7ae7), CC(0x4342), CC(0x2769), CC(0x2ff3), CC(0x03bb), CC(0x0000), CC(0x0000), CC(0x0000),
-    CC(0x7fff), CC(0x579f), CC(0x635f), CC(0x6b3f), CC(0x7f1f), CC(0x7f1b), CC(0x7ef6), CC(0x7f75),
-    CC(0x7f94), CC(0x73f4), CC(0x57d7), CC(0x5bf9), CC(0x4ffe), CC(0x0000), CC(0x0000), CC(0x0000)};
-#endif
-#if 1
-#if !HSTX
-// RGB565 to RGB444
-// $2D and $3D are greys on a real 2C02, not blacks: only $0D/$1D and the
-// $xE/$xF columns are black. Games use them for dimmed text (the unselected
-// menu entry in Bio Hazard), so leaving them at 0 makes that text vanish.
-// The HSTX table below has always had them right.
-#define CC(x) (((x >> 1) & 15) | (((x >> 6) & 15) << 4) | (((x >> 11) & 15) << 8))
-const WORD __not_in_flash_func(NesPalette)[64] = {
-    CC(0x39ce), CC(0x1071), CC(0x0015), CC(0x2013), CC(0x440e), CC(0x5402), CC(0x5000), CC(0x3c20),
-    CC(0x20a0), CC(0x0100), CC(0x0140), CC(0x00e2), CC(0x0ceb), CC(0x0000), CC(0x0000), CC(0x0000),
-    CC(0x5ef7), CC(0x01dd), CC(0x10fd), CC(0x401e), CC(0x5c17), CC(0x700b), CC(0x6ca0), CC(0x6521),
-    CC(0x45c0), CC(0x0240), CC(0x02a0), CC(0x0247), CC(0x0211), CC(0x0000), CC(0x0000), CC(0x0000),
-    CC(0x7fff), CC(0x1eff), CC(0x2e5f), CC(0x223f), CC(0x79ff), CC(0x7dd6), CC(0x7dcc), CC(0x7e67),
-    CC(0x7ae7), CC(0x4342), CC(0x2769), CC(0x2ff3), CC(0x03bb), CC(0x294a), CC(0x0000), CC(0x0000),
-    CC(0x7fff), CC(0x579f), CC(0x635f), CC(0x6b3f), CC(0x7f1f), CC(0x7f1b), CC(0x7ef6), CC(0x7f75),
-    CC(0x7f94), CC(0x73f4), CC(0x57d7), CC(0x5bf9), CC(0x4ffe), CC(0x5ad6), CC(0x0000), CC(0x0000)};
-#else
-// RGB888 to RGB555
-#define CC(c) (((c & 0xf8) >> 3) | ((c & 0xf800) >> 6) | ((c & 0xf80000) >> 9))
-const WORD __not_in_flash_func(NesPalette)[64] = {
-    CC(0x626262), CC(0x001C95), CC(0x1904AC), CC(0x42009D),
-    CC(0x61006B), CC(0x6E0025), CC(0x650500), CC(0x491E00),
-    CC(0x223700), CC(0x004900), CC(0x004F00), CC(0x004816),
-    CC(0x00355E), CC(0x000000), CC(0x000000), CC(0x000000),
+// The palette the game is drawn with. The selectable palettes stay in flash
+// (nes_palettes.cpp); applyNesPalette() copies the chosen one in here.
+WORD NesPalette[64];
+static int appliedNesPalette = -1;
+// "Palette: <name>": the framerate overlay shows the name, the hotkey message
+// all of it. Kept in RAM because the overlays are drawn per scanline.
+static constexpr int PALETTE_LABEL_LEN = 9; // "Palette: "
+static char paletteText[PALETTE_LABEL_LEN + 22 + 1]; // pal2c.py keeps names to 22 characters
+static int paletteTextLen = 0;
+// Set when START + LEFT/RIGHT changed the palette and the settings were not saved
+// since. The hotkey itself does not write to the SD card; the choice is saved
+// when the game is left.
+static bool paletteChangedByHotkey = false;
+// "Palette: <name>", shown for 3 seconds at the top of the picture when a game
+// starts and after the hotkey changed the palette, unless the framerate overlay
+// is on (it shows the name already).
+static bool paletteMessageRequested = false; // picked up at the end of the frame
+static bool showPaletteMessage = false;
+static uint64_t paletteMessageStart_us = 0;
+static const MenuPaletteList nesPaletteList = {NES_PALETTE_COUNT, NesPaletteNames, NesPaletteDescriptions};
 
-    CC(0xABABAB), CC(0x0C4EDB), CC(0x3D2EFF), CC(0x7115F3),
-    CC(0x9B0BB9), CC(0xB01262), CC(0xA92704), CC(0x894600),
-    CC(0x576600), CC(0x237F00), CC(0x008900), CC(0x008332),
-    CC(0x006D90), CC(0x000000), CC(0x000000), CC(0x000000),
+// Copies the palette selected in the settings to NesPalette[] and decodes the
+// palette RAM again with it. Does nothing while that palette is already in use.
+static void applyNesPalette()
+{
+    if (settings.flags.nesPalette >= NES_PALETTE_COUNT)
+    {
+        settings.flags.nesPalette = 0;
+    }
+    const int index = settings.flags.nesPalette;
+    if (index == appliedNesPalette)
+    {
+        return;
+    }
+    memcpy(NesPalette, NesPaletteTables[index], sizeof NesPalette);
+    InfoNES_RefreshPalTable();
+    appliedNesPalette = index;
 
-    CC(0xFFFFFF), CC(0x57A5FF), CC(0x8287FF), CC(0xB46DFF),
-    CC(0xDF60FF), CC(0xF863C6), CC(0xF8746D), CC(0xDE9020),
-    CC(0xB3AE00), CC(0x81C800), CC(0x56D522), CC(0x3DD36F),
-    CC(0x3EC1C8), CC(0x4E4E4E), CC(0x000000), CC(0x000000),
+    // Runs between two frames when the hotkey is used, so no printf here: on the
+    // UART it blocks long enough to make picoDVI miss a scanline.
+    snprintf(paletteText, sizeof paletteText, "Palette: %s", NesPaletteNames[index]);
+    paletteTextLen = strlen(paletteText);
+}
 
-    CC(0xFFFFFF), CC(0xBEE0FF), CC(0xCDD4FF), CC(0xE0CAFF),
-    CC(0xF1C4FF), CC(0xFCC4EF), CC(0xFDCACE), CC(0xF5D4AF),
-    CC(0xE6DF9C), CC(0xD3E99A), CC(0xC2EFA8), CC(0xB7EFC4),
-    CC(0xB6EAE5), CC(0xB8B8B8), CC(0x000000), CC(0x000000)};
-#endif
-#endif
 uint32_t getCurrentNVRAMAddr()
 {
 
@@ -533,16 +520,13 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
             } else if (pushed & DOWN) {
                 loadSaveStateMenu = true;
                 quickSaveAction = SaveStateTypes::SAVE;
-            } else if (pushed & LEFT) {
-#if HW_CONFIG == 8
-               settings.fruitjamVolumeLevel = std::max(-63, settings.fruitjamVolumeLevel - 1);
-               EXT_AUDIO_SETVOLUME(settings.fruitjamVolumeLevel);
-#endif
-            } else if (pushed & RIGHT) {
-#if HW_CONFIG == 8
-               settings.fruitjamVolumeLevel = std::min(23, settings.fruitjamVolumeLevel + 1);
-               EXT_AUDIO_SETVOLUME(settings.fruitjamVolumeLevel);
-#endif
+            } else if (pushed & (LEFT | RIGHT)) {
+                // Previous or next color palette, applied after this frame. On the
+                // Fruit Jam this used to set the volume; that is in the settings menu.
+                const int step = (pushed & RIGHT) ? 1 : NES_PALETTE_COUNT - 1;
+                settings.flags.nesPalette = (settings.flags.nesPalette + step) % NES_PALETTE_COUNT;
+                paletteChangedByHotkey = true;
+                paletteMessageRequested = true;
             }
         }
         // if (p1 & UP) {
@@ -562,6 +546,7 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
                 // saveNVRAM();
                 // reset = true;
                 FrensSettings::savesettings();
+                paletteChangedByHotkey = false; // saved just now
                 showSettings = true;
             }
             if (pushed & A)
@@ -660,6 +645,12 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
     if (reset && !IsNSF)
     {
         saveNVRAM();
+    }
+    if (reset && paletteChangedByHotkey)
+    {
+        // Back to the menu: keep the palette picked with START + LEFT/RIGHT.
+        paletteChangedByHotkey = false;
+        FrensSettings::savesettings();
     }
     *pdwSystem = (reset || resetGame) ? PAD_SYS_QUIT : 0;
 }
@@ -1177,6 +1168,26 @@ int InfoNES_LoadFrame()
            resetGame = true;
         }
     }
+    // A palette chosen in the settings menu (on SAVE) or with START + LEFT/RIGHT
+    // takes effect here, between two frames.
+    if (settings.flags.nesPalette != appliedNesPalette)
+    {
+        applyNesPalette();
+    }
+    if (paletteMessageRequested)
+    {
+        paletteMessageRequested = false;
+        // Not over the NSF player, which has its own text at the top of the screen.
+        if (!IsNSF)
+        {
+            paletteMessageStart_us = Frens::time_us();
+            showPaletteMessage = true;
+        }
+    }
+    else if (showPaletteMessage && Frens::time_us() - paletteMessageStart_us >= 3000000)
+    {
+        showPaletteMessage = false;
+    }
     if (loadSaveStateMenu && !IsNSF) {
         if (quickSaveAction == SaveStateTypes::LOAD_AND_START) {
             if (framesbeforeAutoStateIsLoaded > 0) {
@@ -1412,6 +1423,29 @@ void __not_in_flash_func(InfoNES_PreDrawLine)(int line)
 #endif
 }
 
+// The current line buffer, x pixels in. The overlays below draw into it.
+static inline WORD *__not_in_flash_func(overlayLine)(int x)
+{
+#if !HSTX
+    return (currentLineBuf == nullptr ? currentLineBuffer_->data() : currentLineBuf) + x;
+#else
+    return currentLineBuffer_ + x;
+#endif
+}
+
+// Draws one character's row of the 8x8 font (bit 0 is the leftmost pixel),
+// white on black, and returns the pixel after it.
+static inline WORD *__not_in_flash_func(drawGlyphRow)(WORD *buf, uint8_t bits)
+{
+    const WORD fgc = NesPalette[48];
+    const WORD bgc = NesPalette[15];
+    for (int bit = 0; bit < 8; bit++, bits >>= 1)
+    {
+        *buf++ = (bits & 1) ? fgc : bgc;
+    }
+    return buf;
+}
+
 void __not_in_flash_func(InfoNES_PostDrawLine)(int line)
 {
 #if !HSTX
@@ -1457,31 +1491,28 @@ void __not_in_flash_func(InfoNES_PostDrawLine)(int line)
             fpsString[nchars++] = digits[--nd];
         }
 #endif
-        WORD *fpsBuffer =
-#if !HSTX
-            currentLineBuf == nullptr ? currentLineBuffer_->data() + 40 : currentLineBuf + 40;
-#else
-            currentLineBuffer_ + 40;
-#endif
-        WORD fgc = NesPalette[48];
-        WORD bgc = NesPalette[15];
-
-        int rowInChar = line % 8;
-        for (auto i = 0; i < nchars; i++)
+        const int rowInChar = line % 8;
+        WORD *buf = overlayLine(40);
+        for (int i = 0; i < nchars; i++)
         {
-            char fontSlice = getcharslicefrom8x8font(fpsString[i], rowInChar);
-            for (auto bit = 0; bit < 8; bit++)
-            {
-                if (fontSlice & 1)
-                {
-                    *fpsBuffer++ = fgc;
-                }
-                else
-                {
-                    *fpsBuffer++ = bgc;
-                }
-                fontSlice >>= 1;
-            }
+            buf = drawGlyphRow(buf, getcharslicefrom8x8font(fpsString[i], rowInChar));
+        }
+        // Then the name of the palette in use, so cycling them with START + LEFT/RIGHT
+        // shows which one is on. 35 characters fit between x=40 and the end of the line.
+        buf = drawGlyphRow(buf, 0);
+        const int nameEnd = std::min(paletteTextLen, PALETTE_LABEL_LEN + 35 - 1 - nchars);
+        for (int i = PALETTE_LABEL_LEN; i < nameEnd; i++)
+        {
+            buf = drawGlyphRow(buf, getcharslicefrom8x8font(paletteText[i], rowInChar));
+        }
+    }
+    else if (showPaletteMessage && line >= 8 && line < 16)
+    {
+        // "Palette: <name>", centred on the 256-pixel picture, which starts 32 pixels into the line.
+        WORD *buf = overlayLine(32 + (256 - paletteTextLen * 8) / 2);
+        for (int i = 0; i < paletteTextLen; i++)
+        {
+            buf = drawGlyphRow(buf, getcharslicefrom8x8font(paletteText[i], line % 8));
         }
     }
 
@@ -1644,6 +1675,8 @@ int main()
     isFatalError = !Frens::initAll(selectedRom, CPUFreqKHz, 4, 4, AUDIOBUFFERSIZE, false, true);
 
     scaleMode8_7_ = Frens::applyScreenMode(settings.screenMode);
+    menuSetPaletteList(&nesPaletteList);
+    applyNesPalette(); // the saved one; initAll() loaded the settings
     initzapper();       // Claims GPIO27/28 as pulled-up inputs (custom PCB only)
     zapperMeasureInit(); // Display-lag measurement, compiled out by default
     bool showSplash = true;
@@ -1703,6 +1736,10 @@ int main()
         }
 #endif
         reset = resetGame = loadSaveStateMenu = false;
+        applyNesPalette(); // the settings menu in the rom browser may have changed it
+        showPaletteMessage = false;
+        paletteMessageRequested = true; // name the palette in use as the game starts
+        printf("NES palette: %s\n", NesPaletteNames[settings.flags.nesPalette]);
         //EXT_AUDIO_MUTE_INTERNAL_SPEAKER(settings.flags.fruitJamEnableInternalSpeaker == 0);
         EXT_AUDIO_SETVOLUME(settings.fruitjamVolumeLevel);
         *ErrorMessage = 0;

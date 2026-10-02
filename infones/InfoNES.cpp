@@ -218,6 +218,25 @@ void __not_in_flash_func(InfoNES_SetLineBuffer)(WORD *p, WORD size)
 /* Palette Table */
 WORD PalTable[32];
 
+/* Rebuild PalTable from the palette RAM at PPURAM[0x3f00], the way the $2007
+   writes in K6502_rw.h fill it: the backdrop ($3f00, mirrored at $3f10) goes
+   into every %4==0 slot with the 0x8000 backdrop mark, the other slots map 1:1.
+   Entries the game has not written yet are still 0 from InfoNES_Reset() and
+   are left alone: a written backdrop always carries 0x8000, and a written
+   index 0 decodes to a grey, never to 0 (pal2c.py checks every palette). */
+void InfoNES_RefreshPalTable()
+{
+  if (!PPURAM)
+    return;
+  const WORD backdrop = NesPalette[PPURAM[0x3f00] & 0x3f] | 0x8000;
+  for (int i = 0; i < 32; i++)
+  {
+    if (PalTable[i] == 0 && (!(i & 3) || !PPURAM[0x3f00 + i]))
+      continue;
+    PalTable[i] = (i & 3) ? NesPalette[PPURAM[0x3f00 + i] & 0x3f] : backdrop;
+  }
+}
+
 /* Region-dependent timing. Defaults to NTSC; InfoNES_SetRegion() overrides. */
 WORD STEP_PER_SCANLINE = 114;
 WORD STEP_PER_FRAME    = 29780;

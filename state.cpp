@@ -249,7 +249,10 @@ struct SaveCore
   // Timing / misc
   WORD FrameSkip;
   WORD FrameCnt;
-  BYTE reserved1; // Was the ChrBuf update flag; kept so the file layout does not change
+  // 1 when PPURAM[0x3F00..0x3F1F] holds the palette. Builds before the color
+  // palette setting wrote 0 here (the byte was the ChrBuf update flag) and
+  // stored palette writes made through $3F20-$3FFF only at that address.
+  BYTE palRamValid;
   BYTE byVramWriteEnable;
   BYTE ROM_Mirroring;
   BYTE reserved0; // Padding/alignment
@@ -445,7 +448,7 @@ int Emulator_SaveState(const char *path)
   // Misc/frame
   core.FrameSkip = FrameSkip;
   core.FrameCnt = FrameCnt;
-  core.reserved1 = 0;
+  core.palRamValid = 1;
   core.byVramWriteEnable = byVramWriteEnable;
   core.ROM_Mirroring = ROM_Mirroring;
   memcpy(core.PalTable, PalTable, sizeof core.PalTable);
@@ -904,6 +907,11 @@ int Emulator_LoadState(const char *path)
   byVramWriteEnable = core.byVramWriteEnable;
   ROM_Mirroring = core.ROM_Mirroring;
   memcpy(PalTable, core.PalTable, sizeof PalTable);
+  // The saved colors were decoded with the color palette selected at save
+  // time; decode the restored palette RAM again with the one selected now.
+  // An older state may lack part of its palette RAM, so it keeps its colors.
+  if (core.palRamValid)
+    InfoNES_RefreshPalTable();
   memcpy(APU_Reg, core.APU_Reg, sizeof APU_Reg);
   // APU externals restore
   cur_event = core.cur_event;

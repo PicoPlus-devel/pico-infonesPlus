@@ -251,6 +251,9 @@ extern WORD WorkFrameIdx;
 #endif
 
 extern WORD PalTable[];
+/* Decode the palette RAM into PalTable again, after NesPalette[] or the
+   palette RAM was replaced (a different palette, a loaded state) */
+void InfoNES_RefreshPalTable();
 
 /*-------------------------------------------------------------------*/
 /*  APU and Pad resources                                            */
