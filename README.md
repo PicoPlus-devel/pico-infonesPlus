@@ -1133,7 +1133,7 @@ running. Not every entry is available on every board or in every situation.
 
 ## Color palettes
 
-The colors a NES produces depend on the console and on the television, so there is no single correct palette. The palette is selected with **NES Palette** in the settings menu, or with START + LEFT/RIGHT during play. START + LEFT/RIGHT steps to the previous or next palette and shows its name at the top of the screen for 3 seconds; the choice is saved when you quit the game to the menu. The name of the palette in use is also shown for 3 seconds when a game starts. While the framerate display is on, the name appears there instead. **Default** is the palette that earlier versions used; it differs between boards with HSTX video output and the other boards.
+The colors a NES produces depend on the console and on the television, so there is no single correct palette. The palette is selected with **NES Palette** in the settings menu, or with START + LEFT/RIGHT during play. START + LEFT/RIGHT steps to the previous or next palette and shows its name at the top of the screen for 3 seconds. On RP2350 boards the choice is saved right away; on RP2040 boards it is saved when you quit the game to the menu. The name of the palette in use is also shown for 3 seconds when a game starts. While the framerate display is on, the name appears there instead. **Default** is the palette that earlier versions used; it differs between boards with HSTX video output and the other boards.
 
 The palettes marked FBX are by FirebrandX and Wavebeam is by Nakedarthur. These, PC-10 and Sony CXA are published at [firebrandx.com](https://www.firebrandx.com/nespalette.html), and their descriptions below are taken from there.
 
@@ -1158,7 +1158,7 @@ Gamepad buttons:
   - Adjust settings and resume your game.
 - SELECT + UP/SELECT + DOWN: switches screen modes, including the 8:7 pixel aspect ratio modes.
 - START + Button2: Toggle framerate display. The display also shows the name of the color palette in use.
-- START + LEFT/RIGHT: Select the previous or next [color palette](#color-palettes). Its name is shown at the top of the screen for 3 seconds, or in the framerate display when that is on. The choice is saved when you quit the game to the menu.
+- START + LEFT/RIGHT: Select the previous or next [color palette](#color-palettes). Its name is shown at the top of the screen for 3 seconds, or in the framerate display when that is on. On RP2350 boards the choice is saved right away; on RP2040 boards it is saved when you quit the game to the menu.
 - START + DOWN : (quick) Save state. (Quick Save slot)
 - START + UP : (quick) Load state. (Quick Save slot)
 - SELECT + START + UP + Button2 (all held together): Reboot into BOOTSEL mode for flashing new firmware.

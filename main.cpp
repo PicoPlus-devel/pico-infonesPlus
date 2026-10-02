@@ -151,8 +151,9 @@ static constexpr int PALETTE_LABEL_LEN = 9; // "Palette: "
 static char paletteText[PALETTE_LABEL_LEN + 22 + 1]; // pal2c.py keeps names to 22 characters
 static int paletteTextLen = 0;
 // Set when START + LEFT/RIGHT changed the palette and the settings were not saved
-// since. The hotkey itself does not write to the SD card; the choice is saved
-// when the game is left.
+// since. With a framebuffer the choice is saved right away; in picoDVI line
+// streaming mode writing the SD card mid-game makes the video miss scanlines,
+// so there it is saved when the game is left.
 static bool paletteChangedByHotkey = false;
 // "Palette: <name>", shown for 3 seconds at the top of the picture when a game
 // starts and after the hotkey changed the palette, unless the framerate overlay
@@ -1173,6 +1174,11 @@ int InfoNES_LoadFrame()
     if (settings.flags.nesPalette != appliedNesPalette)
     {
         applyNesPalette();
+        if (paletteChangedByHotkey && Frens::isFrameBufferUsed())
+        {
+            paletteChangedByHotkey = false;
+            FrensSettings::savesettings();
+        }
     }
     if (paletteMessageRequested)
     {
