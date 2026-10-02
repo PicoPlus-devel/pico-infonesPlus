@@ -2,7 +2,7 @@
 
 More games now run, among them Famicom Jump II, Devil Man, Saint Seiya - Ougon Densetsu, the Datach games and Super Mario Bros. + Tetris + Nintendo World Cup.
 Garbled backgrounds fixed in Kyonshiizu 2, Bible Buffet and several other games.
-The color palette can now be chosen in the settings menu.
+A color palette can now be chosen in the settings menu.
 
 # General Info
 
