@@ -84,7 +84,8 @@ extern BYTE *Map111_Chr_Ram;
 extern BYTE *Map19_Chr_Ram;         /* Namco 163: 8KB CHR RAM */
 extern BYTE *Map185_Dummy_Chr_Rom;  /* CNROM protection: 1KB of 0xFF */
 extern BYTE *Map188_Dummy;          /* Karaoke Studio: 8KB $6000 window */
-extern BYTE *Map16_Eeprom;          /* Bandai LZ93D50: 256-byte 24C02 EEPROM */
+extern BYTE *Map16_Eeprom;          /* Bandai LZ93D50: 24C02 and/or 24C01 EEPROM */
+extern BYTE *Map555_Ram;            /* NES-EVENT2: 2KB PRG RAM at $5000 */
 
 /*-------------------------------------------------------------------*/
 /*  SST39SF040 flash emulation (mappers 30 and 111)                  */
@@ -192,6 +193,7 @@ void Map15_Write(WORD wAddr, BYTE byData);
 void Map16_Init();
 void Map16_Write(WORD wAddr, BYTE byData);
 void Map16_HSync();
+WORD Map16_Remap();
 
 void Map17_Init();
 void Map17_Apu(WORD wAddr, BYTE byData);
@@ -249,6 +251,10 @@ void Map33_HSync();
 void Map34_Init();
 void Map34_Write(WORD wAddr, BYTE byData);
 void Map34_Sram(WORD wAddr, BYTE byData);
+
+void Map37_Init();
+void Map37_Write(WORD wAddr, BYTE byData);
+void Map37_Sram(WORD wAddr, BYTE byData);
 
 void Map40_Init();
 void Map40_Write(WORD wAddr, BYTE byData);
@@ -546,6 +552,11 @@ void Map140_Apu(WORD wAddr, BYTE byData);
 void Map151_Init();
 void Map151_Write(WORD wAddr, BYTE byData);
 
+void Map152_Init();
+
+void Map154_Init();
+void Map154_Write(WORD wAddr, BYTE byData);
+
 void Map160_Init();
 void Map160_Write(WORD wAddr, BYTE byData);
 void Map160_HSync();
@@ -615,6 +626,8 @@ void Map202_WriteSub(WORD wAddr, BYTE byData);
 
 void Map206_Init();
 void Map206_Write(WORD wAddr, BYTE byData);
+
+void Map207_Init();
 
 void Map208_Init();
 void Map208_Write(WORD wAddr, BYTE byData);
@@ -721,5 +734,17 @@ BYTE Map255_ReadApu(WORD wAddr);
 
 void Map263_Init();
 void Map263_Write(WORD wAddr, BYTE byData);
+
+void Map268_Init();
+void Map268_Write(WORD wAddr, BYTE byData);
+void Map268_Sram(WORD wAddr, BYTE byData);
+void Map268_Apu(WORD wAddr, BYTE byData);
+bool Map268_Fits();
+
+void Map555_Init();
+void Map555_Write(WORD wAddr, BYTE byData);
+void Map555_Apu(WORD wAddr, BYTE byData);
+BYTE Map555_ReadApu(WORD wAddr);
+void Map555_HSync();
 
 #endif /* !InfoNES_MAPPER_H_INCLUDED */

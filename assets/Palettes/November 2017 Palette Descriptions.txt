@@ -1,0 +1,42 @@
+
+The Final FBX and Nakedarthur palettes:
+
+Composite Direct (FBX):
+
+A pure direct capture palette. Capture devices will 'clip' NTSC voltages to fit the RGB color space. Most colors will come out normally, but some extreme edge-case colors will be clipped and result in a differen hue. The major example is the Super Mario Brother's blue sky appearing more purplish in direct captures. 
+
+
+
+NES Classic (FBX):
+
+Color values taken from the NES Classic console Nintendo released in 2016. The kernel was hacked to include a test ROM that fills the screen with each color entry. Then the HDMI 720p signal was fed into a Datapath Vision E1s capture card, and the screens dumped in lossless 8-8-8 RGB bitmaps. The bitmaps were then color averaged using Adobe Photoshop to remove Nintendo's epilepsy protection.
+
+
+
+PC-10:
+
+RGB values taken from the original Playchoice 10 arcade PPU chips. 
+
+
+
+PVM Style D93 (FBX):
+
+Approximated NTSC NES color appearance on the screen of a Sony PVM monitor running at D93 color temperature.
+
+
+
+Smooth (FBX):
+
+This is Firebrandx's premiere final palette work for the NTSC NES experience. Combines reverse engineered NTSC output levels with a few slight tweaks to improve 'nostalgic' performance on digital displays. Has a wide dynamic range of dark-to-light colors.
+
+
+
+Sony CXA:
+
+A palette that is intended to approximate the RGB translation of NTSC by certain consumer-grade Sony TV sets. original author of this palette is unknown.
+
+
+
+Wavebeam:
+
+Nakedarthur's final approximation palette suited to his experiences with consumer TV NTSC NES colors. Generally looks like a more saturated version of Smooth (FBX) in the final revision. 

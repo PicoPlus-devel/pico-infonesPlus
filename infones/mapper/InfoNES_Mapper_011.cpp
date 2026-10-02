@@ -55,8 +55,9 @@ void Map11_Init()
     InfoNES_SetupChr();
   }
 
-  /* Name Table Mirroring */
-  InfoNES_Mirroring( 1 );
+  /* Name Table Mirroring is hardwired on the board, so the header value
+     InfoNES_Reset has set stays (Galactic Crusader, Mission Cobra are
+     horizontal) */
 
   /* Set up wiring of the interrupt pin */
   K6502_Set_Int_Wiring( 1, 1 ); 
@@ -67,8 +68,11 @@ void Map11_Init()
 /*-------------------------------------------------------------------*/
 void Map11_Write( WORD wAddr, BYTE byData )
 {
-  BYTE byPrgBank = ( byData & 0x01 ) << 2;
-  BYTE byChrBank = ( ( byData & 0x70 ) >> 4 ) << 3;
+  /* Bits 0-1 select a 32KB PRG bank and bits 4-7 an 8KB CHR bank; the
+     128KB Wisdom Tree carts (Bible Buffet, Spiritual Warfare, Joshua)
+     need all of them */
+  BYTE byPrgBank = ( byData & 0x03 ) << 2;
+  BYTE byChrBank = ( ( byData & 0xf0 ) >> 4 ) << 3;
 
   /* Set ROM Banks */
   ROMBANK0 = ROMPAGE( ( byPrgBank + 0 ) % ( NesHeader.byRomSize << 1 ) );
@@ -76,7 +80,10 @@ void Map11_Write( WORD wAddr, BYTE byData )
   ROMBANK2 = ROMPAGE( ( byPrgBank + 2 ) % ( NesHeader.byRomSize << 1 ) );
   ROMBANK3 = ROMPAGE( ( byPrgBank + 3 ) % ( NesHeader.byRomSize << 1 ) );
 
-  /* Set PPU Banks */
+  /* Set PPU Banks; Wally Bear (NINA-07) has 8KB CHR RAM and nothing to switch */
+  if ( NesHeader.byVRomSize == 0 )
+    return;
+
   PPUBANK[ 0 ] = VROMPAGE( ( byChrBank + 0 ) % ( NesHeader.byVRomSize << 3 ) );
   PPUBANK[ 1 ] = VROMPAGE( ( byChrBank + 1 ) % ( NesHeader.byVRomSize << 3 ) );
   PPUBANK[ 2 ] = VROMPAGE( ( byChrBank + 2 ) % ( NesHeader.byVRomSize << 3 ) );

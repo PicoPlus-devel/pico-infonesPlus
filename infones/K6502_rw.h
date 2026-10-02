@@ -427,9 +427,14 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
       }
       else if (addr & 3)
       {
-        // Palette - see the 6-bit note above.
+        // Palette - see the 6-bit note above. $3F20-$3FFF mirror $3F00-$3F1F,
+        // and a write through a mirror is also stored at the address it
+        // mirrors, so PPURAM[0x3F00..0x3F1F] always holds the palette:
+        // InfoNES_RefreshPalTable() decodes it again when the color palette
+        // changes. Archon writes its palette at $3FE0.
         const BYTE byCol = byData & 0x3f;
         PPURAM[addr] = byCol;
+        PPURAM[0x3f00 | (addr & 0x1f)] = byCol;
         PalTable[addr & 0x1f] = NesPalette[byCol];
       }
     }

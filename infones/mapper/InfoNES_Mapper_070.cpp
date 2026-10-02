@@ -4,6 +4,34 @@
 /*                                                                   */
 /*===================================================================*/
 
+/* Same board as mapper 152, which also wires bit 7 to one-screen
+   mirroring. As in Mesen, a cart that ever sets bit 7 is taken to use it. */
+static bool Map70_Mirror_Ctl;
+
+/*-------------------------------------------------------------------*/
+/*  Save state support: the one-screen selection                     */
+/*-------------------------------------------------------------------*/
+/* state.cpp puts the header mirroring back after restoring the banks,
+ * which would undo the one-screen page the game last selected. */
+static int Map70_BlobSize()
+{
+  return 5;
+}
+
+static void Map70_SaveBlob( BYTE *pBuf )
+{
+  for ( int i = 0; i < 4; ++i )
+    pBuf[ i ] = (BYTE)( ( PPUBANK[ NAME_TABLE0 + i ] - VRAMPAGE( 0 ) ) / 0x400 );
+  pBuf[ 4 ] = Map70_Mirror_Ctl;
+}
+
+static void Map70_LoadBlob( BYTE *pBuf )
+{
+  for ( int i = 0; i < 4; ++i )
+    PPUBANK[ NAME_TABLE0 + i ] = VRAMPAGE( pBuf[ i ] & 0x03 );
+  Map70_Mirror_Ctl = pBuf[ 4 ];
+}
+
 /*-------------------------------------------------------------------*/
 /*  Initialize Mapper 70                                             */
 /*-------------------------------------------------------------------*/
@@ -45,8 +73,25 @@ void Map70_Init()
   ROMBANK2 = ROMLASTPAGE( 1 );
   ROMBANK3 = ROMLASTPAGE( 0 );
 
+  /* Set PPU Banks */
+  if ( NesHeader.byVRomSize > 0 )
+  {
+    for ( int nPage = 0; nPage < 8; ++nPage )
+      PPUBANK[ nPage ] = VROMPAGE( nPage );
+    InfoNES_SetupChr();
+  }
+
+  /* Vertical, whatever the header says: Kamen Rider Club's header is wrong */
+  InfoNES_Mirroring( 1 );
+  Map70_Mirror_Ctl = false;
+
+  /* Save state hooks (cleared on every reset, so install them here) */
+  MapperBlobSize = Map70_BlobSize;
+  MapperSaveBlob = Map70_SaveBlob;
+  MapperLoadBlob = Map70_LoadBlob;
+
   /* Set up wiring of the interrupt pin */
-  K6502_Set_Int_Wiring( 1, 1 ); 
+  K6502_Set_Int_Wiring( 1, 1 );
 }
 
 /*-------------------------------------------------------------------*/
@@ -54,35 +99,33 @@ void Map70_Init()
 /*-------------------------------------------------------------------*/
 void Map70_Write( WORD wAddr, BYTE byData )
 {
-  BYTE byChrBank = byData & 0x0f;
-  BYTE byPrgBank = ( byData & 0x70 ) >> 4;
-
   /* Set ROM Banks */
-  byPrgBank <<= 1;
-  byPrgBank %= ( NesHeader.byRomSize << 1 );
-
-  ROMBANK0 = ROMPAGE( byPrgBank );
-  ROMBANK1 = ROMPAGE( byPrgBank + 1 );
+  int nPrgBank = ( ( byData >> 4 ) & 0x07 ) << 1;
+  nPrgBank %= ( NesHeader.byRomSize << 1 );
+  ROMBANK0 = ROMPAGE( nPrgBank );
+  ROMBANK1 = ROMPAGE( nPrgBank + 1 );
 
   /* Set PPU Banks */
-  byChrBank <<= 3;
-  byChrBank %= ( NesHeader.byVRomSize << 3 );
-
-  PPUBANK[ 0 ] = VROMPAGE( byChrBank + 0 );
-  PPUBANK[ 1 ] = VROMPAGE( byChrBank + 1 );
-  PPUBANK[ 2 ] = VROMPAGE( byChrBank + 2 );
-  PPUBANK[ 3 ] = VROMPAGE( byChrBank + 3 );
-  PPUBANK[ 4 ] = VROMPAGE( byChrBank + 4 );
-  PPUBANK[ 5 ] = VROMPAGE( byChrBank + 5 );
-  PPUBANK[ 6 ] = VROMPAGE( byChrBank + 6 );
-  PPUBANK[ 7 ] = VROMPAGE( byChrBank + 7 );
-  InfoNES_SetupChr();
-
-  /* Name Table Mirroring */
-  if ( byData & 0x80 )
+  if ( NesHeader.byVRomSize > 0 )
   {
-    InfoNES_Mirroring( 2 );
-  } else {
-    InfoNES_Mirroring( 3 );
+    int nChrBank = ( byData & 0x0f ) << 3;
+    nChrBank %= ( NesHeader.byVRomSize << 3 );
+    for ( int nPage = 0; nPage < 8; ++nPage )
+      PPUBANK[ nPage ] = VROMPAGE( nChrBank + nPage );
+    InfoNES_SetupChr();
+  }
+
+  /* Name Table Mirroring: bit 7 selects the one-screen page */
+  if ( byData & 0x80 )
+    Map70_Mirror_Ctl = true;
+
+  if ( Map70_Mirror_Ctl )
+  {
+    if ( byData & 0x80 )
+    {
+      InfoNES_Mirroring( 2 );
+    } else {
+      InfoNES_Mirroring( 3 );
+    }
   }
 }

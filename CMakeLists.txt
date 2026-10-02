@@ -184,6 +184,7 @@ add_executable(${projectname}
     DefaultSS555.c
     state.cpp
     zapper.cpp
+    nes_palettes.cpp
 )
 
 # Optional: embed a NES ROM directly into the firmware.

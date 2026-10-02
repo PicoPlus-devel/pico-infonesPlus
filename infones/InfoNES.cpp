@@ -218,6 +218,25 @@ void __not_in_flash_func(InfoNES_SetLineBuffer)(WORD *p, WORD size)
 /* Palette Table */
 WORD PalTable[32];
 
+/* Rebuild PalTable from the palette RAM at PPURAM[0x3f00], the way the $2007
+   writes in K6502_rw.h fill it: the backdrop ($3f00, mirrored at $3f10) goes
+   into every %4==0 slot with the 0x8000 backdrop mark, the other slots map 1:1.
+   Entries the game has not written yet are still 0 from InfoNES_Reset() and
+   are left alone: a written backdrop always carries 0x8000, and a written
+   index 0 decodes to a grey, never to 0 (pal2c.py checks every palette). */
+void InfoNES_RefreshPalTable()
+{
+  if (!PPURAM)
+    return;
+  const WORD backdrop = NesPalette[PPURAM[0x3f00] & 0x3f] | 0x8000;
+  for (int i = 0; i < 32; i++)
+  {
+    if (PalTable[i] == 0 && (!(i & 3) || !PPURAM[0x3f00 + i]))
+      continue;
+    PalTable[i] = (i & 3) ? NesPalette[PPURAM[0x3f00 + i] & 0x3f] : backdrop;
+  }
+}
+
 /* Region-dependent timing. Defaults to NTSC; InfoNES_SetRegion() overrides. */
 WORD STEP_PER_SCANLINE = 114;
 WORD STEP_PER_FRAME    = 29780;
@@ -454,6 +473,7 @@ void InfoNES_Fin()
   if (Map185_Dummy_Chr_Rom) { Frens::f_free(Map185_Dummy_Chr_Rom); Map185_Dummy_Chr_Rom = nullptr; }
   if (Map188_Dummy) { Frens::f_free(Map188_Dummy); Map188_Dummy = nullptr; }
   if (Map16_Eeprom) { Frens::f_free(Map16_Eeprom); Map16_Eeprom = nullptr; }
+  if (Map555_Ram) { Frens::f_free(Map555_Ram); Map555_Ram = nullptr; }
   SstFlash_Release();
   MapperChrRam = nullptr; MapperChrRamSize = 0;
   MapperNtRam = nullptr; MapperNtRamSize = 0;
@@ -580,6 +600,15 @@ int InfoNES_Reset()
     ROM_SRAM = NesHeader.byInfo1 & 2;
     ROM_Trainer = NesHeader.byInfo1 & 4;
     ROM_FourScr = NesHeader.byInfo1 & 8;
+
+    // Famicom Jump II, the Datach games and some 24C01 boards are usually
+    // dumped as mapper 16 (see Map16_Remap)
+    if (MapperNo == 16)
+    {
+      MapperNo = Map16_Remap();
+      if (MapperNo != 16)
+        SubMapperNo = 0;
+    }
   }
 
   /*-------------------------------------------------------------------*/
@@ -682,7 +711,9 @@ int InfoNES_Reset()
     }
   }
 
-  if (MapperTable[nIdx].nMapperNo == -1)
+  // The Limited Run Games mapper 268 reissues bank 256KB of CHR RAM, which
+  // only an RP2350 with PSRAM has room for
+  if (MapperTable[nIdx].nMapperNo == -1 || (MapperNo == 268 && !Map268_Fits()))
   {
     // Non support mapper
     InfoNES_Error("Mapper #%d is unsupported.", MapperNo);
@@ -1173,11 +1204,19 @@ int __not_in_flash_func(InfoNES_HSync)()
   /*-------------------------------------------------------------------*/
   // Refactored from a switch into if/else because SCAN_VBLANK_START is now a
   // runtime value (region-dependent: 241 for NTSC/PAL, 291 for Dendy).
-  if (PPU_Scanline == SCAN_TOP_OFF_SCREEN)
+  if (PPU_Scanline == SCAN_VBLANK_END)
   {
-    // Reset a PPU status
+    // The pre-render line. The PPU clears the vblank, sprite 0 and overflow
+    // flags at its first dot, not at the start of the next frame. Gegege no
+    // Kitarou 2 waits for the sprite 0 flag to drop and then writes the
+    // vertical scroll, which only counts if it lands on this line: the end
+    // of this line copies the scroll for the frame (PPU_Addr = PPU_Temp
+    // above). Cleared at line 0, the flag dropped a line late and the title
+    // screen lost its scroll.
     PPU_R2 = 0;
-
+  }
+  else if (PPU_Scanline == SCAN_TOP_OFF_SCREEN)
+  {
     // Set up a character data
     if (NesHeader.byVRomSize == 0 && FrameCnt == 0)
       InfoNES_SetupChr();
@@ -1219,6 +1258,12 @@ int __not_in_flash_func(InfoNES_HSync)()
 
     // Get the condition of the joypad
     InfoNES_PadState(&PAD1_Latch, &PAD2_Latch, &PAD_System);
+
+    // Nintendo Campus Challenge 1991 starts the competition only from
+    // controller 2, the referee's. Give it controller 1's START as well, so
+    // it can be started with one controller.
+    if (MapperNo == 555)
+      PAD2_Latch |= PAD1_Latch & 0x08;
 
     // NMI on V-Blank
     if (PPU_R0 & R0_NMI_VB)
