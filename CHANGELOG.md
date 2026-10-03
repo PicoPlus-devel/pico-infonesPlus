@@ -31,6 +31,8 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 - The Limited Run Games versions of Star Wars and Star Wars - The Empire Strikes Back now run on RP2350 boards with PSRAM.
 - Nintendo Campus Challenge 1991 (mapper 555) now runs. Press START on the title screen to begin the five-minute competition.
 - Nine color palettes to choose from, under **NES Palette** in the settings menu or with START + LEFT/RIGHT during play. Includes the FirebrandX palettes and a less saturated one for LCD and OLED screens ([#256](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/256)). See [Color palettes](https://github.com/PicoPlus-devel/pico-infonesPlus#color-palettes). On the Fruit Jam these buttons no longer change the volume; use **Fruit Jam Volume Control** in the settings menu.
+- New **Video Clock Fix** setting (boards with HSTX video whose only USB port is the board's own, such as the Pimoroni Pico Plus 2, the Adafruit Metro RP2350 and the Murmulator M2). Turn it on if your TV or monitor shows small dots or lines in the picture with Overclock on. A USB controller can then no longer be used; use a NES, SNES or Wii controller instead. See [Video Clock Fix](https://github.com/PicoPlus-devel/pico-infonesPlus#video-clock-fix).
+- All settings return to their defaults once after updating to this version.
 
 ## Fixes
 
@@ -38,6 +40,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 - Gegege no Kitarou 2: the title did not rise out of the sea and the screen flickered.
 - Bible Buffet, Spiritual Warfare, Joshua, King of Kings and Sunday Funday showed garbled graphics or a black screen. Also fixed: Wally Bear and the No! Gang, Galactic Crusader and Mission Cobra.
 - The **Controller Test** screen is now closed by holding SELECT + UP for 2 seconds. SELECT + START conflicted with some 8BitDo wireless controllers ([#255](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/255)).
+- The **Overclock** setting always matches the speed the board runs at. It could show on while the board ran at the normal speed, or off while the board was still overclocked.
 
 ## Known issues
 

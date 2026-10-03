@@ -115,6 +115,7 @@ int8_t g_settings_visibility_nes[MOPT_COUNT] = {
     [MOPT_MENU_OVERSCAN]           = 0,                    // Overscan in menu (menu.cpp force-shows this below the menu colors)
     [MOPT_GENESIS_PAD]             = 0,                    // Genesis pad type (Genesis only)
     [MOPT_NES_PALETTE]             = 1,                    // Color palette (menu.cpp lists it after Scanline Type)
+    [MOPT_HSTX_CLOCK_FIX]          = 0,                    // Video Clock Fix (set at runtime together with Overclock)
 };
 // #if defined(__riscv)
 // const uint8_t g_available_screen_modes[] = {
@@ -1695,6 +1696,9 @@ int main()
 #else
     g_settings_visibility_nes[MOPT_OVERCLOCK] = 0;
 #endif
+    // The Video Clock Fix only matters at the overclock (378 MHz). It costs the
+    // built-in USB port, so PIO-USB builds force it instead (NES_OVERCLOCK_FIX).
+    g_settings_visibility_nes[MOPT_HSTX_CLOCK_FIX] = g_settings_visibility_nes[MOPT_OVERCLOCK] && !CFG_TUH_RPI_PIO_USB;
     g_settings_visibility = g_settings_visibility_nes;
     g_available_screen_modes = g_available_screen_modes_nes;
     while (true)
