@@ -1388,6 +1388,8 @@ Some displays need 5V connected to the HDMI breakout in order to work:
 - VRC7 expansion audio requires an RP2350 board. MMC5, VRC6, FDS and Sunsoft 5B expansion audio also work on the RP2040.
 - The VRC7 (Yamaha OPLL) FM audio used by *Lagrange Point (JP)* only works on HSTX boards with PSRAM and requires the **Overclock** setting to be enabled. The audio may still show occasional glitches.
 - Save states are not supported for FDS games.
+- The Limited Run Games versions of *Star Wars* and *Star Wars - The Empire Strikes Back* require an RP2350 board with PSRAM.
+- Datach games: scanning barcode cards is not supported.
 
 ***
 
@@ -1547,6 +1549,8 @@ PSRAM: [AndrewCapon](https://github.com/AndrewCapon/PicoPlusPsram)
 lwmem: [MaJerle](https://github.com/MaJerle/lwmem)
 
 Audio feedback and fixes: [szuping](https://github.com/szuping)
+
+NES color palettes: [FirebrandX](https://www.firebrandx.com/nespalette.html), added to the emulator by [szuping](https://github.com/szuping). Wavebeam palette by Nakedarthur. Bubbles palette by [dragonkn9](https://github.com/dragonkn9)
 
 Mesen: https://github.com/SourMesen/Mesen2 used as basis for:
 
