@@ -185,14 +185,14 @@ const WORD NesPaletteTables[NES_PALETTE_COUNT][64] = {
         CC(0xEBE3A0), CC(0xD2EDA2), CC(0xBCF4B4), CC(0xB5F1CE),
         CC(0xB6ECF1), CC(0xBFBFBF), CC(0x000000), CC(0x000000),
     },
-    // LCD/OLED Balanced
-    {   // LCD-OLED Balanced.pal
+    // Bubbles
+    {   // Bubbles.pal
         CC(0x555555), CC(0x193C85), CC(0x1D379D), CC(0x521CB0),
-        CC(0x561F78), CC(0x57224D), CC(0x652020), CC(0x5A3415),
+        CC(0x561F78), CC(0x5F222F), CC(0x652020), CC(0x5A3415),
         CC(0x4C441C), CC(0x314F16), CC(0x1B5128), CC(0x184F39),
         CC(0x103858), CC(0x000000), CC(0x000000), CC(0x000000),
-        CC(0x999999), CC(0x3F5DC3), CC(0x6547D0), CC(0x9531BD),
-        CC(0x993CB3), CC(0x954179), CC(0xC85038), CC(0x845C24),
+        CC(0x999999), CC(0x3F5DC3), CC(0x6547D0), CC(0x7D5FB0),
+        CC(0x993CB3), CC(0x8C3B53), CC(0xC85038), CC(0x845C24),
         CC(0x758E19), CC(0x62961F), CC(0x257F3D), CC(0x24914C),
         CC(0x1A6FA8), CC(0x000000), CC(0x000000), CC(0x000000),
         CC(0xECECEC), CC(0x699BE2), CC(0x998CE4), CC(0x9188EF),
@@ -215,7 +215,7 @@ const char *const NesPaletteNames[NES_PALETTE_COUNT] = {
     "Smooth (FBX)",
     "Sony CXA",
     "Wavebeam",
-    "LCD/OLED Balanced",
+    "Bubbles",
 };
 
 // Shown below the settings menu while the palette option is highlighted.

@@ -1161,7 +1161,7 @@ The palettes marked FBX are by FirebrandX and Wavebeam is by Nakedarthur. These,
 | Smooth (FBX) | FirebrandX's final palette for the NTSC NES. Combines reverse engineered NTSC output levels with a few slight adjustments to improve its appearance on digital displays. Has a wide dynamic range of dark-to-light colors. |
 | Sony CXA | Intended to approximate the RGB translation of NTSC by certain consumer-grade Sony TV sets. The original author of this palette is unknown. |
 | Wavebeam | Nakedarthur's final approximation palette, based on his experience with NES colors on consumer NTSC TVs. In its final revision it looks like a more saturated version of Smooth (FBX). |
-| LCD/OLED Balanced | Reduced saturation for LCD and OLED screens. Contributed by dragonkn9 in [#256](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/256). |
+| Bubbles | Reduced saturation for LCD and OLED screens. Contributed by dragonkn9 in [#256](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/256). |
 
 ## Emulator (in game)
 Gamepad buttons:

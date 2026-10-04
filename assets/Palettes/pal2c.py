@@ -45,7 +45,7 @@ PALETTES = [
     ("Wavebeam", "Wavebeam.pal",
      "Nakedarthur's approximation of NES colors on consumer NTSC TVs. A more saturated "
      "version of Smooth (FBX)."),
-    ("LCD/OLED Balanced", "LCD-OLED Balanced.pal",
+    ("Bubbles", "Bubbles.pal",
      "Reduced saturation for LCD and OLED screens. Contributed by dragonkn9 in issue #256."),
 ]
 
