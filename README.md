@@ -15,6 +15,7 @@
 - **Save State Management** – Automatic battery-backed SRAM persistence and manual save states
 - **Famicom Disk System** – Support for FDS game images with user-supplied BIOS. More info on this in the [FDS Games](#famicom-disk-system-fds-games-1) section below.
 - **Multi-Region Support** – NTSC, PAL, and Dendy region compatibility
+- **Color Palettes** – A choice of nine NES color palettes, selectable in the settings menu or with START + LEFT/RIGHT during play ([details](#color-palettes))
 - **NSF Audio Playback** – Play NES music files (`.nsf`) with visual VU-meter overlay. More info on this in the [Playing NSF Audio Files](#playing-nsf-audio-files) section below.
 - **WAV Audio Playback** – WAV (`.wav`) format audio playback in the menu (RP2350 only). More info on this in the [WAV Music Playback in Menu](#wav-music-playback-in-menu-rp2350-only) section below.
 - **Flexible Hardware** – [Compatible with standard DVI/HDMI breakout boards](#possible-configurations), with optional [custom PCB](#pcb-with-raspberry-pi-pico-or-pico-2-and-pimoroni-pico-plus-2) and [3D-printed case](#3d-printed-case-for-pcb)
@@ -217,9 +218,6 @@ This can be fixed permanently, once, with the [flash_config](https://github.com/
 
 > [!CAUTION]
 > Do not apply `FLASH_QE_SET_1.uf2` a second time. A repeat run fails and the board then has to be recovered by erasing the flash with `universal_flash_nuke.uf2` first.
-
-> [!NOTE]
-> Even after the fix, boards with a non-Winbond flash chip are limited to 252 MHz. This means the **Overclock** setting (378 MHz) cannot be used on them, and therefore neither can the VRC7 FM audio of *Lagrange Point (JP)*, which depends on it.
 
 
 
@@ -1111,7 +1109,8 @@ running. Not every entry is available on every board or in every situation.
 | Recently played | Open the list of the [last 20 games you started](#recently-played-games) and restart one of them. Menu only, not available in-game. |
 | Screen Mode | Cycle the screen modes, including the 8:7 pixel aspect ratio modes. |
 | Scanline Type | Simple or LCD style scanlines. HSTX boards only. |
-| Framerate Overlay | Show the frames per second on screen. |
+| NES Palette | The colors the game is drawn with. A description of the palette is shown below the options while this entry is selected. See [Color palettes](#color-palettes). |
+| Framerate Overlay | Show the frames per second on screen, followed by the name of the color palette in use. |
 | Display Mode | HDMI or DVI output. HSTX boards only. |
 | External Audio | Route audio to the I2S/line-out output instead of HDMI. Selecting DVI as Display Mode enables this automatically, because DVI carries no audio. |
 | Menu Font Color / Menu Font Back Color | Menu colours (0-63). |
@@ -1121,13 +1120,45 @@ running. Not every entry is available on every board or in every situation.
 | FDS Auto Insert Disk 1 On Start | Insert disk 1 automatically at start. On by default. FDS games only. |
 | Sprite Limit (8 per line) | Draw at most 8 sprites per scanline, as the NES does. On by default. Turning it off reduces sprite flicker, but a few games rely on the limit, for example *Felix the Cat*. |
 | Overclock | Raise the CPU clock from 252 MHz to 378 MHz. Only on HSTX boards with PSRAM, and currently only needed for *Lagrange Point (JP)*. Menu only, not available in-game. |
-| Controller Test | Show a gamepad graphic that follows the controller you last pressed a button on, plus a list of connected input sources. Useful for checking wiring and button mappings. Hold SELECT + START for 2 seconds to exit. |
+| Video Clock Fix | Turn this on if the TV or monitor shows small dots or lines in the picture at 378 MHz. A USB controller can then no longer be used. Offered together with Overclock, on boards without a second USB port. Menu only, not available in-game. See [Video Clock Fix](#video-clock-fix). |
+| Controller Test | Show a gamepad graphic that follows the controller you last pressed a button on, plus a list of connected input sources. Useful for checking wiring and button mappings. Hold SELECT + UP for 2 seconds to exit. |
 | Enter BOOTSEL Mode | Reboot into BOOTSEL so you can flash new firmware. |
 | USB Drive Mode | Show the SD card on a computer as a USB drive, so games can be added or removed without taking the card out. See [USB drive mode](#usb-drive-mode). Menu only, not available in-game. |
 | Return to emulator selection | Go back to the emulator picker. Only present in [pico-bootLoader](#running-under-pico-bootloader) builds. |
 
 > [!NOTE]
 > Changes are only applied when you select **SAVE**. **CANCEL** discards them, **DEFAULT** restores the default values. Press SELECT to jump directly to **SAVE**.
+
+## Video Clock Fix
+
+At 378 MHz the HDMI output clock is derived from the CPU clock, and some TVs and monitors then show small dots or short dotted lines in the picture. The emulator runs at that clock when the **Overclock** setting is on. Taking the HDMI clock from the clock source of the built-in USB port avoids this, but leaves that port without a usable clock.
+
+- Boards that connect USB controllers to a second USB port, such as the Adafruit Fruit Jam, always do this. Nothing is lost on these boards.
+- Boards with HSTX video whose only USB port is the board's own, such as a Pico 2 or Pimoroni Pico Plus 2 with the Adafruit DVI breakout, the Adafruit Metro RP2350 and the Murmulator M2, offer it as a setting: **Video Clock Fix**, in the settings menu of the main menu, below Overclock. It is off by default. It is only offered where Overclock is, on boards with PSRAM.
+- Boards with PicoDVI video are not affected and do not offer the setting.
+
+> [!IMPORTANT]
+> With Video Clock Fix enabled, the built-in USB port can no longer be used for a gamepad, keyboard or mouse. Use a NES, SNES or Wii Classic controller on the GPIO controller ports instead. The port still powers the board, and USB drive mode remains available.
+
+The setting can only be enabled while a NES, SNES or Wii Classic controller is detected; otherwise an error message is shown. A SNES controller cannot be detected until a button on it has been pressed. Enabling the setting shows a warning first; confirming it restarts the board. To disable it, set it to OFF in the settings menu. If no working controller is available, delete `settings_NES.dat` from the root of the SD card on a computer: on the next start the board disables the fix and restarts once.
+
+## Color palettes
+
+The colors a NES produces depend on the console and on the television, so there is no single correct palette. The palette is selected with **NES Palette** in the settings menu, or with START + LEFT/RIGHT during play. START + LEFT/RIGHT steps to the previous or next palette and shows its name at the top of the screen for 3 seconds. On RP2350 boards the choice is saved right away; on RP2040 boards it is saved when you quit the game to the menu. The name of the palette in use is also shown for 3 seconds when a game starts. While the framerate display is on, the name appears there instead. **Default** is the palette that earlier versions used; it differs between boards with HSTX video output and the other boards.
+
+The palettes marked FBX are by FirebrandX and Wavebeam is by Nakedarthur. These, PC-10 and Sony CXA are published at [firebrandx.com](https://www.firebrandx.com/nespalette.html), and their descriptions below are taken from there.
+
+| Palette | Description |
+| ------- | ----------- |
+| Default | The palette used by earlier versions of this emulator. |
+| Composite Direct (FBX) | A pure direct capture palette. Capture devices clip NTSC voltages to fit the RGB color space. Most colors come out normally, but some extreme edge-case colors are clipped and result in a different hue. The major example is the blue sky in Super Mario Bros., which appears more purplish in direct captures. |
+| NES Classic (FBX) | Color values taken from the NES Classic console Nintendo released in 2016. The kernel was modified to include a test ROM that fills the screen with each color entry. The HDMI 720p signal was fed into a Datapath Vision E1s capture card, and the screens were stored as lossless 8-8-8 RGB bitmaps. The bitmaps were then color averaged to remove Nintendo's epilepsy protection. |
+| PC-10 | RGB values taken from the original PlayChoice-10 arcade PPU chips. |
+| PVM Style D93 (FBX) | Approximated NTSC NES color appearance on the screen of a Sony PVM monitor running at D93 color temperature. |
+| Smooth (FBX) | FirebrandX's final palette for the NTSC NES. Combines reverse engineered NTSC output levels with a few slight adjustments to improve its appearance on digital displays. Has a wide dynamic range of dark-to-light colors. |
+| Sony CXA | Intended to approximate the RGB translation of NTSC by certain consumer-grade Sony TV sets. The original author of this palette is unknown. |
+| Wavebeam | Nakedarthur's final approximation palette, based on his experience with NES colors on consumer NTSC TVs. In its final revision it looks like a more saturated version of Smooth (FBX). |
+| Bubbles | Reduced saturation for LCD and OLED screens. Contributed by dragonkn9 in [#256](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/256). |
 
 ## Emulator (in game)
 Gamepad buttons:
@@ -1137,14 +1168,15 @@ Gamepad buttons:
   - Manage save states. Load or save your game state to one of 5 slots plus a quick save slot. Enable auto save/load state on exit/start.
   - Adjust settings and resume your game.
 - SELECT + UP/SELECT + DOWN: switches screen modes, including the 8:7 pixel aspect ratio modes.
-- START + Button2: Toggle framerate display
+- START + Button2: Toggle framerate display. The display also shows the name of the color palette in use.
+- START + LEFT/RIGHT: Select the previous or next [color palette](#color-palettes). Its name is shown at the top of the screen for 3 seconds, or in the framerate display when that is on. On RP2350 boards the choice is saved right away; on RP2040 boards it is saved when you quit the game to the menu.
 - START + DOWN : (quick) Save state. (Quick Save slot)
 - START + UP : (quick) Load state. (Quick Save slot)
 - SELECT + START + UP + Button2 (all held together): Reboot into BOOTSEL mode for flashing new firmware.
 - **Pimoroni Pico DV Demo Base and Murmulator only**: SELECT + LEFT: Switch audio output to the connected speakers on the line-out jack. The speaker setting will be remembered when the emulator is restarted. Not available on boards that output audio over HDMI.
 - **Fruit Jam Only** 
   - pushbutton 2 (on board) or SELECT + RIGHT: Toggles the VU meter on or off. (NeoPixel LEDs light up in sync with the music rhythm)
-  - START + LEFT/RIGHT: Adjust volume of built-in speaker and external audio jack.
+  - The volume of the built-in speaker and the external audio jack is set with **Fruit Jam Volume Control** in the settings menu.
 - **RP2350 with PSRAM only**: Record about 30 seconds of audio by pressing START to pause the game and then START + Button1. Audio is recorded to **/soundrecorder.wav** on the SD card.
 - **Genesis Mini Controller**: When using a Genesis Mini controller with 3 buttons, press C for SELECT. On 8-button Genesis controllers, press MODE for SELECT.
 - **USB keyboard**: When using a USB keyboard
@@ -1308,9 +1340,6 @@ Using a USB game controller introduces some latency. The legacy controllers ((S)
 
 When starting a game, and the controller is unresponsive, you have to unplug and replug the controller to get it working. Not all controllers behave this way. I have a SNES controller that has no problems. The NES controller however must always be replugged to make it work. It is kind of hit and miss.
 
-> [!NOTE]
-> When using a SNES style USB controller, press Y to set the controller up properly. Otherwise the B button will not work. You have to do this every time you start a game or boot into the menu.
-
 
 ## XInput style controllers.
 
@@ -1356,6 +1385,8 @@ Some displays need 5V connected to the HDMI breakout in order to work:
 - VRC7 expansion audio requires an RP2350 board. MMC5, VRC6, FDS and Sunsoft 5B expansion audio also work on the RP2040.
 - The VRC7 (Yamaha OPLL) FM audio used by *Lagrange Point (JP)* only works on HSTX boards with PSRAM and requires the **Overclock** setting to be enabled. The audio may still show occasional glitches.
 - Save states are not supported for FDS games.
+- The Limited Run Games versions of *Star Wars* and *Star Wars - The Empire Strikes Back* require an RP2350 board with PSRAM.
+- Datach games: scanning barcode cards is not supported.
 
 ***
 
@@ -1515,6 +1546,8 @@ PSRAM: [AndrewCapon](https://github.com/AndrewCapon/PicoPlusPsram)
 lwmem: [MaJerle](https://github.com/MaJerle/lwmem)
 
 Audio feedback and fixes: [szuping](https://github.com/szuping)
+
+NES color palettes: [FirebrandX](https://www.firebrandx.com/nespalette.html), added to the emulator by [szuping](https://github.com/szuping). Wavebeam palette by Nakedarthur. Bubbles palette by [dragonkn9](https://github.com/dragonkn9)
 
 Mesen: https://github.com/SourMesen/Mesen2 used as basis for:
 

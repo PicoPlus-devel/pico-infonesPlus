@@ -1,5 +1,102 @@
 # History of changes
 
+# v0.51
+
+## New
+
+- New **Sprite Limit (8 per line)** setting. v0.50 limited the number of sprites per line to 8, like a real NES, which makes some games flicker. Turn the setting off for less flicker. It is on by default, because a few games such as *Felix the Cat* need it.
+
+## Fixes
+
+- *Arkanoid* on the custom PCB and the Adafruit breadboard setup (the `piconesPlus_AdafruitDVISD_*` binaries): the paddle was stuck on the right side of the screen and ignored the D-pad. Since v0.46 the emulator thought a Zapper was plugged into port 2, even when the port was empty or had a normal controller in it ([#234](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/234)). Thanks to [PetersonL-tech](https://github.com/PetersonL-tech).
+- RP2040 boards: starting a MMC5 game (*Castlevania III*, *Just Breed*, ...) which was already in flash caused an out of memory panic. ([#242](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/242)). Thanks to [chubunov](https://github.com/chubunov).
+- Games that use the sound chip's sample channel as a timer now work: *Over Obj* no longer shows a black screen.
+
+## Known issues
+
+- *Over Obj*: a black bar appears in the middle of the screen during gameplay.
+
+# v0.50
+
+## New
+
+- **Mapper 196** is now supported, so *Super Bros. 11 - Mario Adventures* runs.
+- MMC5 games such as *Castlevania III*, *Just Breed* and the Koei strategy games now run on RP2040 boards, not only on RP2350.
+
+## Fixes
+
+| Game | Mapper | Symptom |
+|---|---|---|
+| Battery-backed MMC5 games such as *Romance of the Three Kingdoms II*, *Nobunaga's Ambition II* and *Just Breed* | 5 | Saved games were not kept, and save states did not restore correctly |
+| *Project Blue* | 111 | Blank screen at startup |
+| *Bio Hazard*, *Yuefei*, *Bao Xiao San Guo* | 15 | Did not start |
+| *Indiana Jones and the Last Crusade* (Taito) | 1 | Flickering black bars and a shaking logo on the title screen |
+| *Battletoads & Double Dragon* | 7 | Flickering line through the title logo |
+| *The Lion King* (unlicensed), *Jurassic Park - The Lost World* (unlicensed) | 4 | Black line through the picture |
+
+- On boards using the DVI output, two shades of grey were shown as black, so dimmed text was invisible. In *Bio Hazard* only the highlighted menu entry could be read. Boards using HDMI were not affected.
+- A maximum of 8 sprites per line is now shown, as on a real NES. In *Felix the Cat* Felix now disappears into the magic bag before a bonus level instead of staying visible on top of it. Busy scenes in some games may flicker more, as they do on the console ([#240](https://github.com/PicoPlus-devel/pico-infonesPlus/pull/240)). Thanks to [magistr6x9](https://github.com/magistr6x9).
+
+# v0.49
+
+## New
+
+- **Mapper 111** is now supported, so *The Storied Sword* runs.
+- **Mapper 263** is now supported, so *Boogerman II - The Final Adventure* runs instead of showing a black screen.
+- **Mapper 208** is now supported, so *Street Fighter IV* runs.
+
+## Fixes
+
+| Game | Mapper | Symptom |
+|---|---|---|
+| *Mike Tyson's Punch-Out!!* | 9 | Scrambled line of big letters on the boxer name screens |
+| *Fire Emblem Gaiden (JP)* | 10 | Stray specks on the title screen |
+| *Mike Tyson's Punch-Out!!*, *Indiana Jones and the Last Crusade*, *Lunar Pool* | any | Wrong colours, and different colours on different boards |
+| *Laser Invasion*, *Gun Sight (JP)*, *Anticipation*, *Al Unser Jr. Turbo Racing*, *Defenders of Dynatron City*, *Contra (JP)*, *Goemon (JP)* | any | Wrong or dropped sound channel |
+| *240p Test Suite* | any | 8000 Hz sound test silent |
+| *240p Test Suite* | any | Hill zone scroll test frozen and strobing |
+| *Indiana Jones and the Last Crusade*, *Kid Kool* (and its Japanese version) | any | Garbled title screen |
+| *Castlevania III: Dracula's Curse* | 5 | Status-bar lettering fills the playfield after the intro has run a while |
+| *Romance of the Three Kingdoms II* | 5 | Patches of wrong tiles left on the map after a window closes |
+| *Shin 4 Nin Uchi Mahjong (JP)* | 5 | Garbled title screen |
+| *Genchou Hishi (JP)* | 5 | Corrupted map and portraits |
+| *Just Breed (JP)* | 5 | Stray line of wrong tiles |
+| Any MMC5 game shipping no character ROM | 5 | Division by zero on every scanline |
+| *Knight on the Moon* | 30 | Flickering, garbled graphics |
+| *Dungeons & Doomknights* | 30 | Flickering title screen, game unresponsive |
+| *Full Quiet Steam* | 4 | Scrambled player, enemies and status bar |
+| *Rad Racer II* | 4 | Wrong game screen, far half of the road 128 pixels off |
+| *Gauntlet* | 4 | Fourth screen page on the cartridge was unused |
+| *Napoleon Senki (JP)* | 77 | Fourth screen page on the cartridge was unused |
+| *Rally Bike*, *Dash Yarou (JP)* | 2 | Stray line at the edge of the status bar |
+| *Knight Rider* | 1 | Stray line at the edge of the status bar |
+| *DataMan* | 34 | Black screen |
+| *Street Fighter VI* | 4 | Black screen |
+| *Millionaire (PAL)* | 79 | Black screen |
+| *Mortal Kombat 3 - Special 56 Peoples* and other J.Y. Company games | 90 | Screen artifacts and a broken title screen |
+| *Teenage Mutant Ninja Turtles (JP)*, *Teenage Mutant Ninja Turtles 2 - The Manhattan Project (JP)*, *Batman 4*, *FIFA International 2' 96*, *Pizza Pop Mario* | 25 | Black screen |
+| *Gradius II (JP)*, *Bio Miracle Bokutte Upa (JP)* | 25 | Missing status bar |
+| *Racer Mini Yonku (JP)* | 25 | Garbled copyright line |
+| *The Jetsons - Cogswell's Caper (JP)* | 48 | Title screen unreadable |
+| *The Flintstones - The Rescue of Dino & Hoppy (JP)*, *Captain Saver (JP)*, *Bubble Bobble 2 (JP)*, *Don Doko Don 2 (JP)*, *Bakushou!! Jinsei Gekijou 3 (JP)* | 48 | Garbled sprites |
+
+Not tied to one game:
+
+- Games that carry a newer cartridge header are now identified correctly instead of being run as whatever older cartridge type their number happened to match.
+- Writing to one particular part of the screen layout no longer corrupts the stored colour palette.
+
+# v0.48
+
+## New
+
+- **USB drive mode**: the settings menu can now show the SD card on your computer over USB, so you can add or remove games without taking the card out. Open the menu with SELECT from the game list, pick *USB drive mode*, then eject the drive on your computer or press B when you are done. It is not available while a game is running.
+- On boards where controllers plug into the console's own USB port, that same port is the one you connect to the computer, so a USB controller cannot be used in this mode: press B on a controller in the NES port, or eject from the computer. The console restarts afterwards. On RP2040 boards the screen also goes black while the card is mounted; the menu explains this first and lets you back out.
+
+## Fixes
+
+- Fixed a flickering band of wrong graphics across part of the screen in games that scroll between two name tables: *Final Fantasy*, *Zelda II*, *The Addams Family* and *Super Xevious*. The emulator kept drawing the wrong half of the map until partway down the frame.
+- On HSTX boards the picture sat four lines too low, leaving a wide black band at the top and none at the bottom. It is now centered again ([#225](https://github.com/PicoPlus-devel/pico-infonesPlus/pull/225)). Thanks to [zZmiz](https://github.com/zZmiz).
+
 # v0.47
 
 ## Display

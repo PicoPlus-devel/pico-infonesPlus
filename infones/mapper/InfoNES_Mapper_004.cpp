@@ -20,6 +20,11 @@ DWORD Map4_Chr4, Map4_Chr5, Map4_Chr6, Map4_Chr7;
  * Allocated lazily in Map4_Init, freed in InfoNES_Fin. */
 BYTE *Map4_Chr_Ram;
 static DWORD Map4_Chr_Ram_Pages;   /* 0 = flat 8KB inside PPURAM */
+static DWORD Map4_Chr_Ram_Alloc;   /* bytes behind Map4_Chr_Ram */
+
+/* The most CHR RAM the next Map4_Init allocates. Mapper 268 raises it for
+   the 256KB boards before calling Map4_Init, which puts it back. */
+DWORD Map4_Chr_Ram_Limit = MAP4_CHR_RAM_SIZE;
 
 #define Map4_CRAMPAGE(a) &Map4_Chr_Ram[ ( (a) % Map4_Chr_Ram_Pages ) * 0x400 ]
 
@@ -160,6 +165,9 @@ void Map4_Init()
   /* Claim a CHR RAM buffer when the cartridge carries more than the 8KB the
      core keeps in PPURAM. Only NES 2.0 can declare that (byte 11, low nibble:
      size = 64 << shift), so an iNES 1.0 header never takes this path. */
+  DWORD dwLimit = Map4_Chr_Ram_Limit;
+  Map4_Chr_Ram_Limit = MAP4_CHR_RAM_SIZE;
+
   Map4_Chr_Ram_Pages = 0;
   if ( NesHeader.byVRomSize == 0 && ( NesHeader.byInfo2 & 0x0c ) == 0x08 )
   {
@@ -168,14 +176,20 @@ void Map4_Init()
 
     if ( dwSize > 0x2000 )
     {
-      if ( dwSize > MAP4_CHR_RAM_SIZE )
-        dwSize = MAP4_CHR_RAM_SIZE;
+      if ( dwSize > dwLimit )
+        dwSize = dwLimit;
 
+      if ( Map4_Chr_Ram && Map4_Chr_Ram_Alloc < dwSize )
+      {
+        Frens::f_free( Map4_Chr_Ram );
+        Map4_Chr_Ram = nullptr;
+      }
       if ( !Map4_Chr_Ram )
       {
-        Map4_Chr_Ram = (BYTE *)Frens::f_malloc( MAP4_CHR_RAM_SIZE );
+        Map4_Chr_Ram_Alloc = ( dwSize > MAP4_CHR_RAM_SIZE ) ? dwSize : MAP4_CHR_RAM_SIZE;
+        Map4_Chr_Ram = (BYTE *)Frens::f_malloc( Map4_Chr_Ram_Alloc );
         if ( Map4_Chr_Ram )
-          InfoNES_MemorySet( Map4_Chr_Ram, 0, MAP4_CHR_RAM_SIZE );
+          InfoNES_MemorySet( Map4_Chr_Ram, 0, Map4_Chr_Ram_Alloc );
       }
 
       /* Allocation failure (only possible on a RAM-constrained RP2040) leaves

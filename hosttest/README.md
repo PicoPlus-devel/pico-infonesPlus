@@ -1,7 +1,8 @@
 # hosttest — Linux host harness for the InfoNES core
 
 Runs the unmodified `infones/` emulator core headless on a Linux PC, dumping
-frames as images. Useful for debugging core behavior (PPU rendering, CPU
+frames as images, or in a window with sound and keyboard input
+([live mode](#live-mode-nes_live1)). Useful for debugging core behavior (PPU rendering, CPU
 timing, mapper state) with fast iteration and full instrumentation — no Pico
 flashing, no serial console. Only hardware-specific issues (HSTX/DVI output,
 SD card, PSRAM latency, audio sinks) still need the real device.
@@ -16,7 +17,9 @@ unlocks MMC5, VRC7 CHR-RAM, the Famicom Disk System (FDS), and the
 
 | File | Purpose |
 |---|---|
-| `host_main.cpp` | main loop, InfoNES_* callbacks, 256×240 PPM dumper, env-var input injection, minimal iNES parser, inline CRC32, NES palette |
+| `build.sh` | builds `hosttest/nes_host`, with live mode when SDL2 is installed |
+| `host_main.cpp` | main loop, InfoNES_* callbacks, 256×240 PPM dumper, env-var input injection, input record/replay, audio mix, minimal iNES parser, inline CRC32, NES palette |
+| `host_sdl.cpp`, `host_sdl.h` | live mode: window, sound output, keyboard, pacing (SDL2) |
 | `stubs.cpp` | Frens helper subset (f_malloc/f_free/isPsramEnabled/...) the core links against, audio callback no-ops, host-stdio-backed FatFs (so FDS BIOS loads), `settings` instance |
 | `shim/pico.h` | empty `__not_in_flash_func` / `__not_in_flash` placement macros |
 | `shim/pico/time.h` | host `time_us_32` from `clock_gettime` |
@@ -27,21 +30,15 @@ unlocks MMC5, VRC7 CHR-RAM, the Famicom Disk System (FDS), and the
 
 ## Build
 
-From the repo root:
-
 ```sh
-g++ -O1 -g -fsanitize=address -std=gnu++17 \
-  -DPICO_RP2350=1 -DNDEBUG -DPICO_NO_HARDWARE=1 \
-  -I hosttest/shim -I infones -I pico_lib -I pico_shared -I . \
-  -o hosttest/nes_host \
-  hosttest/host_main.cpp hosttest/stubs.cpp state.cpp \
-  infones/InfoNES.cpp infones/K6502.cpp infones/InfoNES_Mapper.cpp \
-  infones/InfoNES_pAPU.cpp infones/InfoNES_pAPU_Vrc7.cpp infones/InfoNES_Region.cpp \
-  infones/InfoNES_NSF.cpp infones/InfoNES_FDS.cpp
+hosttest/build.sh            # -> hosttest/nes_host
+hosttest/build.sh -O2        # extra arguments go to g++
 ```
 
+- With SDL2 installed (`libsdl2-dev`) the harness is built with live mode
+  (see [Live mode](#live-mode-nes_live1)); without it, it builds as before.
 - AddressSanitizer is intentional: it doubles as a memory-bug detector for
-  the core. Drop `-fsanitize=address` for faster runs.
+  the core. Remove `-fsanitize=address` from `build.sh` for faster runs.
 - `-I .` (repo root, listed last so the shims keep priority) is there for
   `zapper.h`, which `K6502_rw.h` includes.
 - `-DPICO_RP2350=1` enables the MMC5 / VRC7 CHR-RAM / FDS code paths.
@@ -51,6 +48,7 @@ g++ -O1 -g -fsanitize=address -std=gnu++17 \
 
 ```sh
 ./hosttest/nes_host <rom.nes|rom.fds> <total-frames> <dump-every-N> [outdir]
+NES_LIVE=1 ./hosttest/nes_host <rom.nes|rom.fds> [total-frames] [dump-every-N] [outdir]
 
 # examples
 ./hosttest/nes_host "Super Mario Bros.nes"      600 60  hosttest/out
@@ -79,6 +77,7 @@ save files (`*.SAV`) are written under `$NES_FAT_ROOT/saves/`.
 |---|---|
 | `NES_PRESS_START=<frame>` | hold START for 10 frames starting there (gets past title screens) |
 | `NES_PRESS_KEYS=<f>:<hex>[,<f>:<hex>...]` | hold the given button mask 10 frames at each frame |
+| `NES_PRESS_KEYS2=<f>:<hex>[,...]` | the same for controller 2 |
 | `NES_HOLD_A=<frame>` | autofire button A (4 frames on / 4 off) from that frame on |
 | `NES_REGION=ntsc\|pal\|dendy` | override `InfoNES_DetectRegion` (CRC lookup still runs, but result is overridden) |
 | `NES_DUMP_REGS=1` | print PPU R0..R7, scanline, PAD1 latch, mapper every 100 frames |
@@ -93,6 +92,12 @@ save files (`*.SAV`) are written under `$NES_FAT_ROOT/saves/`.
 | `NES_LOAD_STATE=<frame>` | call `Emulator_LoadState` at that frame |
 | `NES_STATE_PATH=<file>` | state file for the two above; default `<outdir>/host.state` |
 | `NES_NO_SPRITE_LIMIT=1` | draw every sprite on a scanline, like the settings menu's Sprite Limit OFF; default is the hardware limit of 8 |
+| `NES_LIVE=1` | window, sound and keyboard in real time (SDL2 build), see [Live mode](#live-mode-nes_live1) |
+| `NES_SCALE=<n>` | live window scale, default 3 (768×720) |
+| `NES_MUTE=1` | live mode without sound output |
+| `NES_PAD_REC=<file>` | record both controllers per frame, see [Recording and replaying input](#recording-and-replaying-input) |
+| `NES_PAD_PLAY=<file>` | replay a `NES_PAD_REC` recording |
+| `NES_AUDIO_OUT=<file>` | write the mixed sound as raw 44.1 kHz s16 stereo; play it with `aplay -f S16_LE -r 44100 -c 2 <file>` |
 
 `NES_SAVE_STATE` / `NES_LOAD_STATE` print `SAVESTATE frame=N rc=R` and
 `LOADSTATE frame=N rc=R`, so `state.cpp` can be exercised without a board. Note
@@ -122,6 +127,101 @@ Button mask (per joypad, hex):
 Example: `NES_PRESS_KEYS=120:08,200:11` taps START at frame 120, then holds
 UP+A at frame 200 for 10 frames each.
 
+## Live mode (`NES_LIVE=1`)
+
+`NES_LIVE=1` opens a window that shows every frame, plays the sound and reads
+the keyboard as controller 1, paced to real time (60 fps, 50 for PAL and
+Dendy). Only the ROM is required:
+
+```sh
+NES_LIVE=1 ./hosttest/nes_host "Super Mario Bros.nes"
+NES_LIVE=1 ./hosttest/nes_host game.nes 3599 600 hosttest/out   # one minute, a dump every 10 s
+```
+
+Without a frame count the run lasts until the window is closed. Frames are
+dumped only with F12, unless `dump-every-N` is given. The final-frame dump
+of a headless run is not written. All other environment variables still
+apply; scripted input (`NES_PRESS_*`, `NES_HOLD_A`) is ORed with the keyboard.
+
+| Key | Action |
+|---|---|
+| Arrow keys | D-pad |
+| Z / X | A / B |
+| S / A | START / SELECT |
+| Space | pause or resume |
+| N | while paused: run one frame (held: keeps stepping) |
+| Tab (hold) | fast-forward, without sound |
+| F12 | write the frame on screen to `<outdir>/frame_NNNNN.ppm`, also while paused |
+| Esc | quit (closing the window or Ctrl-C does the same) |
+
+The pad keys are those of a USB keyboard on the device
+(`pico_shared/hid_app.cpp`). Keys only work while the window has focus. There
+is no reset key (the device has none either) and no disk-swap key; use
+`NES_FDS_SWAP` for FDS games that do not swap automatically.
+
+The window title shows the frame number, as used by `NES_SAVE_STATE`,
+`NES_PRESS_KEYS` and the dump file names, and the measured frame rate.
+Pacing follows the sound output; with `NES_MUTE=1` or without a sound
+device, a timer is used. Live mode shows what the core draws and plays, not
+how fast the board runs it.
+
+Under WSL2 the window and sound go through WSLg. The first `LIVE:` line
+shows the drivers SDL chose; `SDL_VIDEODRIVER` and `SDL_AUDIODRIVER` override
+them. The WSLg sound output sometimes stalls for a few seconds; the game
+keeps running and the sound comes back by itself.
+
+## Recording and replaying input
+
+`NES_PAD_REC=<file>` records both controllers for every frame of a run, live
+or headless. `NES_PAD_PLAY=<file>` feeds a recording back, and the run
+reproduces it exactly: every frame and every sample. This turns a glitch
+seen while playing into something the headless tools can examine:
+
+```sh
+NES_LIVE=1 NES_PAD_REC=/tmp/smb.pad ./hosttest/nes_host smb.nes
+# pause at the glitch, step to it with N, press F12:
+#   LIVE: frame 2417 dumped to hosttest/out/frame_02417.ppm
+mkdir -p hosttest/out/replay
+NES_PAD_PLAY=/tmp/smb.pad ./hosttest/nes_host smb.nes 2430 1 hosttest/out/replay
+cmp hosttest/out/frame_02417.ppm hosttest/out/replay/frame_02417.ppm   # identical
+```
+
+The file is plain text, one line per change; `#` starts a comment:
+
+```
+# pico-infonesPlus host-harness input recording
+# rom: /home/frank/roms/nes/smb.nes
+# <frame> <pad1> <pad2> | <frame> end
+149 08 00
+152 00 00
+242 81 00
+846 end
+```
+
+`<frame> <pad1> <pad2>` sets both controllers from that frame on, as hex
+masks in the bit order above (`<pad2>` may be left out: 00). `<frame> end`
+marks where the recording stopped. Frame numbers must not decrease. A file
+written by hand needs no `end` line; its last masks then last until the run
+ends.
+
+Until the `end` line the recording replaces the keyboard and the scripted
+input. After it, they take over again: a live replay hands control back to
+the keyboard, which is a way to return to a point deep in a game. Record the
+continuation with `NES_PAD_REC` to a new file.
+
+For an exact replay, use the same ROM and the same machine settings. The
+header lists those that were set (`NES_REGION`, `NES_NO_PSRAM`,
+`NES_NO_SPRITE_LIMIT`, `NES_FDS_*`, the state options, `NES_FAT_ROOT` and
+`ASAN_OPTIONS`). Use a build with the same sanitizer setting, since it
+decides what freshly allocated save RAM contains. After a core change, a
+replay shows what the change does with the same input.
+
+Recording and replay, like live mode and `NES_AUDIO_OUT`, render the sound;
+a plain headless run does not. Rendering is part of the emulated machine
+(the DMC fetches its sample bytes from the CPU bus while it renders), so a
+recording replays exactly only with `NES_PAD_PLAY`. In practice this rarely
+matters: 389 ROMs ran 900 frames each with identical frames either way.
+
 ## Caveats
 
 - Host runs are fully deterministic: no PSRAM latency, no input-timing
@@ -135,7 +235,9 @@ UP+A at frame 200 for 10 frames each.
 - Frames are unpacked the way the picoDVI build's `CC()` macro reads the
   palette table (RGB444), so host output matches a picoDVI board. HSTX boards
   use a different palette table in `main.cpp`, so their colours differ.
-- Audio is stubbed entirely (`InfoNES_SoundOutput` is a sink).
+- Sound is rendered and mixed (as the device does, with its default DVI
+  gain) only in live mode and with `NES_AUDIO_OUT`, `NES_PAD_REC` or
+  `NES_PAD_PLAY`. A plain headless run renders none, as before.
 - Zapper support compiles out (`ZAPPER_D3`/`ZAPPER_D4` are undefined here, so
   `ZAPPER_SUPPORTED` is 0), and `$4017` reads behave exactly as before.
 - NSF files aren't auto-detected (no `.nsf` dispatch in the harness).
