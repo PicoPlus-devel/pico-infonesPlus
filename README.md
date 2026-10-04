@@ -219,9 +219,6 @@ This can be fixed permanently, once, with the [flash_config](https://github.com/
 > [!CAUTION]
 > Do not apply `FLASH_QE_SET_1.uf2` a second time. A repeat run fails and the board then has to be recovered by erasing the flash with `universal_flash_nuke.uf2` first.
 
-> [!NOTE]
-> Even after the fix, boards with a non-Winbond flash chip are limited to 252 MHz. This means the **Overclock** setting (378 MHz) cannot be used on them, and therefore neither can the VRC7 FM audio of *Lagrange Point (JP)*, which depends on it.
-
 
 
 ***
