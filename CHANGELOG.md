@@ -22,6 +22,12 @@ Keep in mind that `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then 
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
+# v0.54
+
+## New
+
+- New setting **Button Layout**: with **SNES**, controllers with four face buttons use Y and B (Xbox: X and A, PlayStation: Square and Cross) as the NES B and A buttons ([#260](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/260)).
+
 # v0.53
 
 ## New

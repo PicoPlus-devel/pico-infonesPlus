@@ -1051,6 +1051,8 @@ Download the metadata pack from the [releases page](https://github.com/PicoPlus-
 > [!NOTE]
 > An original NES controller has no Button3. Everything reachable with it can also be reached from the settings menu.
 
+In a game, Button1 is NES B and Button2 is NES A. With the **Button Layout** setting set to **SNES**, the left and the bottom button are used instead (SNES Y and B). See [Settings menu](#settings-menu).
+
 ## Menu 
 Gamepad buttons:
 - UP/DOWN: Next/previous item in the menu.
@@ -1115,6 +1117,7 @@ running. Not every entry is available on every board or in every situation.
 | External Audio | Route audio to the I2S/line-out output instead of HDMI. Selecting DVI as Display Mode enables this automatically, because DVI carries no audio. |
 | Menu Font Color / Menu Font Back Color | Menu colours (0-63). |
 | Fruit Jam VU Meter / Fruit Jam Volume Control | Fruit Jam only. |
+| Button Layout | The buttons a game uses as NES B and A. **NES** (default): Button1 and Button2. **SNES**: on a controller with four face buttons, the left and the bottom button: Y and B on a SNES controller, X and A on XInput, Square and Cross on DualShock/DualSense, y and b on a Wii Classic controller. The menu and the button combinations are not affected. NES and Genesis controllers keep their buttons. A NES Classic controller on the Wii port cannot be told apart from a Wii Classic controller; use **NES** with it. |
 | Rapid Fire on A / Rapid Fire on B | Enable rapid fire per button. |
 | FDS Auto Swap Disk side | Swap the disk side automatically when the game asks for it. Off by default. FDS games only. |
 | FDS Auto Insert Disk 1 On Start | Insert disk 1 automatically at start. On by default. FDS games only. |
