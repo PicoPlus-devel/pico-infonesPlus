@@ -31,6 +31,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 ## Fixes
 
 - SNES controller on the controller port: the first press of B no longer acts as A after a restart or after starting a game.
+- Nekketsu Kouha Kunio-kun: part of the status bar scrolled along with the playfield ([#182](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/182)).
 
 # v0.53
 
