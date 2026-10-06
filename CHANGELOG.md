@@ -28,6 +28,10 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 
 - New setting **Button Layout**: with **SNES**, controllers with four face buttons use Y and B (Xbox: X and A, PlayStation: Square and Cross) as the NES B and A buttons ([#260](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/260)).
 
+## Fixes
+
+- SNES controller on the controller port: the first press of B no longer acts as A after a restart or after starting a game.
+
 # v0.53
 
 ## New
