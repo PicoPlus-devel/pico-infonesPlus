@@ -299,6 +299,25 @@ static const uint32_t Hblank_Draw_Crcs[] =
 };
 static WORD SCANLINE_DRAW_STEP = 0;
 
+/* ROMs whose lines are drawn before their CPU slice instead of after it, so a
+   PPU or mapper write lands on the line after the one it was made in.
+
+   Castlevania III raises its status bar split IRQ on line 46, and the handler
+   writes the playfield's fine X, name table mapping and CHR banks in the
+   middle of line 47, the blank bottom row of the status bar. On hardware that
+   row is fetched before the writes arrive. Drawn after the slice, the whole
+   line took the playfield's CHR banks and fine X, so the bottom of the status
+   bar scrolled with the playfield. Akumajou Densetsu (VRC6) runs the same
+   handler, but its IRQ counts whole scanlines here instead of CPU cycles and
+   fires about 47 cycles early, so its fine X also reached line 46. */
+static const uint32_t Line_Start_Draw_Crcs[] =
+{
+  0xED2465BE,   /* Castlevania III - Dracula's Curse (USA) */
+  0x671F23A8,   /* Castlevania III - Dracula's Curse (Europe) */
+  0xE349AF38,   /* Akumajou Densetsu (Japan) */
+};
+static bool DrawAtLineStart = false;
+
 /* Table for Mirroring */
 BYTE PPU_MirrorTable[][4] =
     {
@@ -907,6 +926,11 @@ void InfoNES_SetRegion(int region)
   for (uint32_t dwCrc : Hblank_Draw_Crcs)
     if (dwCrc == InfoNES_RomCrc)
       SCANLINE_DRAW_STEP = STEP_PER_SCANLINE * 256 / 341;
+
+  DrawAtLineStart = false;
+  for (uint32_t dwCrc : Line_Start_Draw_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      DrawAtLineStart = true;
 }
 
 int InfoNES_GetRegion()
@@ -1040,6 +1064,10 @@ void __not_in_flash_func(InfoNES_Cycle)()
     bool bSpriteHit = SpriteJustHit == PPU_Scanline &&
                       PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN;
 
+    // Line_Start_Draw_Crcs: the line is drawn before its CPU slice runs
+    if (DrawAtLineStart)
+      InfoNES_HSyncDraw();
+
     if (SCANLINE_DRAW_STEP)
     {
       // Hblank_Draw_Crcs: draw the line where its visible part ends, and run
@@ -1148,8 +1176,9 @@ int __not_in_flash_func(InfoNES_HSync)()
   // PPU_Scr_V_Bit = tmpv & 7;
   // PPU_Scr_V_Byte = (tmpv >> 3) & 31;
 
-  // Drawn in InfoNES_Cycle() instead for the ROMs in Hblank_Draw_Crcs
-  if (!SCANLINE_DRAW_STEP)
+  // Drawn in InfoNES_Cycle() instead for the ROMs in Hblank_Draw_Crcs and
+  // Line_Start_Draw_Crcs
+  if (!SCANLINE_DRAW_STEP && !DrawAtLineStart)
     InfoNES_HSyncDraw();
 
   util::WorkMeterReset(); // 計測起点はここ
