@@ -33,6 +33,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 - SNES controller on the controller port: the first press of B no longer acts as A after a restart or after starting a game.
 - Nekketsu Kouha Kunio-kun: part of the status bar scrolled along with the playfield ([#182](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/182)).
 - Castlevania III and Akumajou Densetsu: the bottom of the status bar scrolled along with the playfield.
+- *Bubbles* palette: updated colors. The NES Zapper now works with it ([#259](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/259)). Thanks to [dragonkn9](https://github.com/dragonkn9).
 
 # v0.53
 
