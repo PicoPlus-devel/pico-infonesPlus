@@ -117,6 +117,8 @@ See the downloads on the releases page for the correct binary to use with this b
 - [Murmulator M1 and M2 boards](https://murmulator.ru).
 See the downloads on the releases page for the correct binary to use with these boards.
 
+- [Olimex RP2040-PICO-PC](https://www.olimex.com/Products/MicroPython/PICO/RP2040-PICO-PC/) fitted with a Raspberry Pi Pico 2. For use with a USB game controller and a NES or SNES controller on the UEXT connector. See [Olimex RP2040-PICO-PC](#olimex-rp2040-pico-pc).
+
 [See below to see how to set up your specific configuration.](#setup)
 
 
@@ -254,6 +256,7 @@ Click on the link below for your specific board configuration:
   * [3D printed case for this PCB](#3d-printed-case)
 - [PCB with WaveShare RP2350 USB A](#pcb-with-waveshare-rp2350-usb-a)
   * [Build Guide](#build-guide)
+- [Olimex RP2040-PICO-PC with a Pico 2](#olimex-rp2040-pico-pc)
 - (Discontinued) [Raspberry Pi Pico or Pico 2, setup for Pimoroni Pico DV Demo Base](#raspberry-pi-pico-or-pico-2-setup-for-pimoroni-pico-dv-demo-base)
 
 The SpotPear HDMI board and the Murmulator M1/M2 boards are supported as well, but have no setup section here. Flash `piconesPlus_SpotpearHDMI_pico_arm.uf2` / `piconesPlus_SpotpearHDMI_pico2_arm.uf2`, or `piconesPlus_MurmulatorM1_pico_arm.uf2` / `piconesPlus_MurmulatorM1_pico2_arm.uf2` / `piconesPlus_MurmulatorM2_arm.uf2` from the [releases page](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest) and wire the board according to its own documentation.
@@ -1028,6 +1031,19 @@ https://www.instructables.com/PicoNES-RaspberryPi-Pico-Based-NES-Emulator/
 > [!NOTE]
 >  Due to the small size, micro soldering skills are required. It uses 0603 sized SMD components. Please see the Instructables link for information.
 
+## Olimex RP2040-PICO-PC
+
+The [Olimex RP2040-PICO-PC](https://www.olimex.com/Products/MicroPython/PICO/RP2040-PICO-PC/) is a carrier board for a Raspberry Pi Pico with an HDMI connector, a microSD card slot, a USB-A port and an audio jack. Only a Raspberry Pi Pico 2 is supported in it.
+
+Flash **[piconesPlus_OlimexPicoPC_arm.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_OlimexPicoPC_arm.uf2)** from the [releases page](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest).
+
+- **Sound:** through HDMI and the audio jack at the same time.
+- **Controllers:** a USB controller or USB keyboard on the USB-A port. A NES or SNES controller can be connected to the UEXT connector: clock on GPIO 5, latch on GPIO 9 and data on GPIO 20. There is no second controller port, no Wii Classic controller support and no NES Zapper support.
+- **PSRAM:** the board has room for an optional PSRAM chip (chip select on GPIO 8). Without it, a game is written to flash before it starts. The **Overclock** and [Video Clock Fix](#video-clock-fix) settings are only offered with PSRAM fitted. With Video Clock Fix enabled the USB-A port no longer works for controllers, so a NES or SNES controller on the UEXT connector is needed.
+- **Pico 2 W:** there is no Pico 2 W binary. On a Pico 2 W, GPIO 23, which this build uses to reduce noise on the audio jack, is connected to the wireless chip.
+
+Support for this board was contributed by [DnCraptor](https://github.com/DnCraptor).
+
 
 ***
 
@@ -1137,13 +1153,13 @@ running. Not every entry is available on every board or in every situation.
 At 378 MHz the HDMI output clock is derived from the CPU clock, and some TVs and monitors then show small dots or short dotted lines in the picture. The emulator runs at that clock when the **Overclock** setting is on. Taking the HDMI clock from the clock source of the built-in USB port avoids this, but leaves that port without a usable clock.
 
 - Boards that connect USB controllers to a second USB port, such as the Adafruit Fruit Jam, always do this. Nothing is lost on these boards.
-- Boards with HSTX video whose only USB port is the board's own, such as a Pico 2 or Pimoroni Pico Plus 2 with the Adafruit DVI breakout, the Adafruit Metro RP2350 and the Murmulator M2, offer it as a setting: **Video Clock Fix**, in the settings menu of the main menu, below Overclock. It is off by default. It is only offered where Overclock is, on boards with PSRAM.
+- Boards with HSTX video whose only USB port is the board's own, such as a Pico 2 or Pimoroni Pico Plus 2 with the Adafruit DVI breakout, the Adafruit Metro RP2350, the Murmulator M2 and the Olimex RP2040-PICO-PC, offer it as a setting: **Video Clock Fix**, in the settings menu of the main menu, below Overclock. It is off by default. It is only offered where Overclock is, on boards with PSRAM.
 - Boards with PicoDVI video are not affected and do not offer the setting.
 
 > [!IMPORTANT]
 > With Video Clock Fix enabled, the built-in USB port can no longer be used for a gamepad, keyboard or mouse. Use a NES, SNES or Wii Classic controller on the GPIO controller ports instead. The port still powers the board, and USB drive mode remains available.
 
-The setting can only be enabled while a NES, SNES or Wii Classic controller is detected; otherwise an error message is shown. A SNES controller cannot be detected until a button on it has been pressed. Enabling the setting shows a warning first; confirming it restarts the board. To disable it, set it to OFF in the settings menu. If no working controller is available, delete `settings_NES.dat` from the root of the SD card on a computer: on the next start the board disables the fix and restarts once.
+The setting can only be enabled while a NES, SNES or Wii Classic controller is detected; otherwise an error message is shown. An original SNES controller is detected right away; some third-party SNES controllers only after a button on them has been pressed. Enabling the setting shows a warning first; confirming it restarts the board. To disable it, set it to OFF in the settings menu. If no working controller is available, delete `settings_NES.dat` from the root of the SD card on a computer: on the next start the board disables the fix and restarts once.
 
 ## Color palettes
 
@@ -1461,6 +1477,7 @@ Options:
      12: Murmulator M1
      13: Murmulator M2 (rp2350 only)
      14: Adafruit Feather RP2350 with TLV320DAC3100 I2S DAC and sdcard breakout board and PIO USB.
+     15: Olimex RP2040-PICO-PC with a Pico 2 (rp2350 only)
   -m: Run cmake only, do not build the project
   -e: use the pico-extras based I2S audio driver (default: legacy custom driver)
   -h: display this help
@@ -1537,6 +1554,8 @@ NES gamepad support contributed by [PaintYourDragon](https://github.com/PaintYou
 Wii Classic controller support by [PaintYourDragon](https://github.com/PaintYourDragon) & [Adafruit](https://github.com/adafruit).
 
 Adafruit Feather DVI - RP2040 support by [PaintYourDragon](https://github.com/PaintYourDragon) & [Adafruit](https://github.com/adafruit).
+
+Olimex RP2040-PICO-PC support, including sound through its audio jack, by [DnCraptor](https://github.com/DnCraptor).
 
 XInput driver: https://github.com/Ryzee119/tusb_XInput by [Ryzee119](https://github.com/Ryzee119)
 

@@ -1,8 +1,9 @@
 # CHANGELOG
 
-More games now run, among them Famicom Jump II, Devil Man, Saint Seiya - Ougon Densetsu, the Datach games and Super Mario Bros. + Tetris + Nintendo World Cup.
-Garbled backgrounds fixed in Kyonshiizu 2, Bible Buffet and several other games.
-A color palette can now be chosen in the settings menu.
+New **Button Layout** setting: play with Y and B on a SNES-style controller.
+Support for the Olimex RP2040-PICO-PC with a Raspberry Pi Pico 2.
+Status bar fixes for Castlevania III and Nekketsu Kouha Kunio-kun.
+Updated *Bubbles* palette.
 
 # General Info
 
@@ -27,13 +28,15 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 ## New
 
 - New setting **Button Layout**: with **SNES**, controllers with four face buttons use Y and B (Xbox: X and A, PlayStation: Square and Cross) as the NES B and A buttons ([#260](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/260)).
+- Support for the [Olimex RP2040-PICO-PC](https://www.olimex.com/Products/MicroPython/PICO/RP2040-PICO-PC/) with a Raspberry Pi Pico 2: HDMI, sound through HDMI and the audio jack, a USB controller and a NES or SNES controller on the UEXT connector. See [Olimex RP2040-PICO-PC](https://github.com/PicoPlus-devel/pico-infonesPlus#olimex-rp2040-pico-pc). Thanks to [DnCraptor](https://github.com/DnCraptor).
 
 ## Fixes
 
 - SNES controller on the controller port: the first press of B no longer acts as A after a restart or after starting a game.
 - Nekketsu Kouha Kunio-kun: part of the status bar scrolled along with the playfield ([#182](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/182)).
 - Castlevania III and Akumajou Densetsu: the bottom of the status bar scrolled along with the playfield.
-- *Bubbles* palette: updated colors. The NES Zapper now works with it ([#259](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/259)). Thanks to [dragonkn9](https://github.com/dragonkn9).
+- Nekketsu Koukou Dodgeball-bu: the status bar flickered.
+- *Bubbles* palette: updated colors. Thanks to [dragonkn9](https://github.com/dragonkn9).
 
 # v0.53
 
@@ -60,30 +63,6 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 
 - Datach games: scanning barcode cards is not supported.
 - *Over Obj*: a black bar appears in the middle of the screen during gameplay.
-
-# v0.52
-
-## New
-
-- Famicom Disk System (FDS) games now also run on RP2040 boards. The FDS BIOS is still required.
-- New **Overscan fix in menu** setting for TVs that cut off the edges of the menu. *Rows* leaves the top and bottom text rows blank, *Rows and columns* also the first and last columns. Games are not affected ([#244](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/244)). Thanks to [chubunov](https://github.com/chubunov).
-
-
-## Fixes
-
-- The **Controller Test** screen showed a broken controller outline and a misaligned list of input sources.
-- Seicross (Rev 1), Spy vs Spy and Bird Week (Japanese versions) started with a black screen.
-- High Speed and Pin Bot showed scrambled graphics on the title screen and the pinball table. A smaller artifact remains when the table scrolls up ([#245](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/245)).
-- On boards with PSRAM, games could overwrite their own tile graphics while clearing video memory at startup, which left wrong or missing graphics in, among others, 1942, Tokkyuu Shirei Solbrain, Ganbare Goemon 2 and Star Wars - The Empire Strikes Back.
-- Ganbare Goemon Gaiden 2 showed scrambled graphics ([#248](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/248)). Thanks to [szuping](https://github.com/szuping).
-- Dragon Ball Z II, Dragon Ball Z III, Dragon Ball Z Gaiden, Rokudenashi Blues and SD Gundam Gaiden 2 and 3 could stay on a black screen. Their save data (EEPROM) is now supported, so saving works too ([#246](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/246)).
-
-## Other
-
-- The settings menu shows more options at once: the color palette now appears only while one of the menu colors is selected.
-- In the settings menu, SELECT jumps directly to **SAVE**.
-- RP2040 boards: about 57 KB of memory freed.
-- RP2350 boards without PSRAM: FDS saves are now kept in one file per game, as on boards with PSRAM. Existing saves are picked up automatically.
 
 # previous changes
 
@@ -209,6 +188,14 @@ For more info about the Murmulator see this website: https://murmulator.ru/ and 
 | Board | Binary |
 |:--|:--|
 | Pico 2/Pico 2 w | [piconesPlus_MurmulatorM2_arm.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_MurmulatorM2_arm.uf2) |
+
+### Olimex RP2040-PICO-PC
+
+| Board | Binary | Readme |
+|:--|:--|:--|
+| Olimex RP2040-PICO-PC with a Pico 2 | [piconesPlus_OlimexPicoPC_arm.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_OlimexPicoPC_arm.uf2) | [Readme](README.md#olimex-rp2040-pico-pc) |
+
+There is no Pico 2 W binary for this board.
 
 ### Other downloads
 
