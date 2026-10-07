@@ -318,6 +318,21 @@ static const uint32_t Line_Start_Draw_Crcs[] =
 };
 static bool DrawAtLineStart = false;
 
+/* ROMs that get an NMI when they set $2000 bit 7 while the vblank flag is
+   still set, as on hardware (K6502_rw.h).
+
+   Nekketsu Koukou Dodgeball-bu turns NMI off around each MMC1 bank switch.
+   When vblank began inside one, the frame lost its NMI and the status bar was
+   drawn with the playfield scroll, more often the busier the game got. Not
+   global: with the frame 88 cycles too long (Ntsc_Exact_Frame_Crcs), games
+   that poll $2002 just before vblank get NMIs they would not get on hardware;
+   Adventures of Lolo (Japan) went black. */
+static const uint32_t Nmi_On_Enable_Crcs[] =
+{
+  0x62C67984,   /* Nekketsu Koukou Dodgeball-bu (Japan) */
+};
+bool PPU_NmiOnEnable = false;
+
 /* Table for Mirroring */
 BYTE PPU_MirrorTable[][4] =
     {
@@ -931,6 +946,11 @@ void InfoNES_SetRegion(int region)
   for (uint32_t dwCrc : Line_Start_Draw_Crcs)
     if (dwCrc == InfoNES_RomCrc)
       DrawAtLineStart = true;
+
+  PPU_NmiOnEnable = false;
+  for (uint32_t dwCrc : Nmi_On_Enable_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      PPU_NmiOnEnable = true;
 }
 
 int InfoNES_GetRegion()

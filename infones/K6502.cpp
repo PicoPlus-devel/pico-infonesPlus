@@ -381,6 +381,7 @@ static int SliceBias;  // clocks added to g_wPassedClocks to end it early
 static bool InSlice;
 static bool BreakArmed;
 static uint32_t BreakCycle;
+static bool NmiBreak;  // K6502_RaiseNmi() ended the slice
 
 uint32_t K6502_Now()
 {
@@ -411,6 +412,25 @@ void K6502_BreakAt(bool enable, uint32_t cycle)
   BreakCycle = cycle;
   if (InSlice)
     applyBreak();
+}
+
+/* An NMI raised by an instruction (a $2000 write that enables it during
+   vblank). The slice ends after the instruction and stepSliced() takes the
+   NMI there; NMI_REQ alone would wait for the next K6502_Step, up to a
+   scanline later. */
+void K6502_RaiseNmi()
+{
+  NMI_REQ;
+  if (!InSlice)
+    return;
+  int passed = g_wPassedClocks - SliceBias;
+  if (passed < SliceLimit)
+  {
+    int bias = SliceLimit - passed;
+    g_wPassedClocks += bias - SliceBias;
+    SliceBias = bias;
+    NmiBreak = true;
+  }
 }
 
 // A table for the test
@@ -1858,7 +1878,7 @@ static void __not_in_flash_func(step)(int wClocks)
 /*===================================================================*/
 /* step() split at the K6502_BreakAt() cycle. There the DMC model raises its
    IRQ, which is taken on that cycle rather than at the next slice, and the
-   rest of the slice runs after it. */
+   rest of the slice runs after it. K6502_RaiseNmi() splits it the same way. */
 static void __not_in_flash_func(stepSliced)(int wClocks)
 {
   for (;;)
@@ -1880,6 +1900,14 @@ static void __not_in_flash_func(stepSliced)(int wClocks)
     g_wCurrentClocks -= SliceBias - entryBias;
     SliceBias = 0;
     ApuDmcIrqBreak();
+
+    // K6502_RaiseNmi() ended the slice: take its NMI here
+    if (NmiBreak)
+    {
+      NmiBreak = false;
+      if (NMI_State != NMI_Wiring)
+        procNMI();
+    }
 
     // procNMI() drops the clocks this slice still owes, so put them back. A
     // pending NMI keeps waiting for the next K6502_Step, as it always did.

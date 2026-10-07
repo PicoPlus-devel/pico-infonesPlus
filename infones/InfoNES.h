@@ -99,6 +99,8 @@ extern BYTE PPU_R1_Line;
 extern BYTE PPU_R2;
 extern BYTE PPU_R3;
 extern BYTE PPU_R7;
+/* Enabling NMI during vblank raises one. See Nmi_On_Enable_Crcs in InfoNES.cpp. */
+extern bool PPU_NmiOnEnable;
 
 //extern BYTE PPU_Scr_V;
 //extern BYTE PPU_Scr_V_Next;
