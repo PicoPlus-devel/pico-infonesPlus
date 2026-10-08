@@ -315,6 +315,8 @@ static const uint32_t Line_Start_Draw_Crcs[] =
   0xED2465BE,   /* Castlevania III - Dracula's Curse (USA) */
   0x671F23A8,   /* Castlevania III - Dracula's Curse (Europe) */
   0xE349AF38,   /* Akumajou Densetsu (Japan) */
+  0x1ED3CAA3,   /* Akumajou Densetsu (Japan) (Virtual Console) */
+  0x7DE76794,   /* Akumajou Densetsu (Japan), 512KB overdump */
 };
 static bool DrawAtLineStart = false;
 
