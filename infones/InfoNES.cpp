@@ -330,6 +330,8 @@ static bool DrawAtLineStart = false;
 static const uint32_t Nmi_On_Enable_Crcs[] =
 {
   0x62C67984,   /* Nekketsu Koukou Dodgeball-bu (Japan) */
+  0xAED38D5A,   /* Nekketsu Koukou Dodgeball-bu (Japan) (Virtual Console) */
+  0x73110DFD,   /* Nekketsu Koukou Dodgeball-bu (Japan), 512KB overdump */
 };
 bool PPU_NmiOnEnable = false;
 
