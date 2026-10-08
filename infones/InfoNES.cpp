@@ -299,6 +299,44 @@ static const uint32_t Hblank_Draw_Crcs[] =
 };
 static WORD SCANLINE_DRAW_STEP = 0;
 
+/* ROMs whose lines are drawn before their CPU slice instead of after it, so a
+   PPU or mapper write lands on the line after the one it was made in.
+
+   Castlevania III raises its status bar split IRQ on line 46, and the handler
+   writes the playfield's fine X, name table mapping and CHR banks in the
+   middle of line 47, the blank bottom row of the status bar. On hardware that
+   row is fetched before the writes arrive. Drawn after the slice, the whole
+   line took the playfield's CHR banks and fine X, so the bottom of the status
+   bar scrolled with the playfield. Akumajou Densetsu (VRC6) runs the same
+   handler, but its IRQ counts whole scanlines here instead of CPU cycles and
+   fires about 47 cycles early, so its fine X also reached line 46. */
+static const uint32_t Line_Start_Draw_Crcs[] =
+{
+  0xED2465BE,   /* Castlevania III - Dracula's Curse (USA) */
+  0x671F23A8,   /* Castlevania III - Dracula's Curse (Europe) */
+  0xE349AF38,   /* Akumajou Densetsu (Japan) */
+  0x1ED3CAA3,   /* Akumajou Densetsu (Japan) (Virtual Console) */
+  0x7DE76794,   /* Akumajou Densetsu (Japan), 512KB overdump */
+};
+static bool DrawAtLineStart = false;
+
+/* ROMs that get an NMI when they set $2000 bit 7 while the vblank flag is
+   still set, as on hardware (K6502_rw.h).
+
+   Nekketsu Koukou Dodgeball-bu turns NMI off around each MMC1 bank switch.
+   When vblank began inside one, the frame lost its NMI and the status bar was
+   drawn with the playfield scroll, more often the busier the game got. Not
+   global: with the frame 88 cycles too long (Ntsc_Exact_Frame_Crcs), games
+   that poll $2002 just before vblank get NMIs they would not get on hardware;
+   Adventures of Lolo (Japan) went black. */
+static const uint32_t Nmi_On_Enable_Crcs[] =
+{
+  0x62C67984,   /* Nekketsu Koukou Dodgeball-bu (Japan) */
+  0xAED38D5A,   /* Nekketsu Koukou Dodgeball-bu (Japan) (Virtual Console) */
+  0x73110DFD,   /* Nekketsu Koukou Dodgeball-bu (Japan), 512KB overdump */
+};
+bool PPU_NmiOnEnable = false;
+
 /* Table for Mirroring */
 BYTE PPU_MirrorTable[][4] =
     {
@@ -907,6 +945,16 @@ void InfoNES_SetRegion(int region)
   for (uint32_t dwCrc : Hblank_Draw_Crcs)
     if (dwCrc == InfoNES_RomCrc)
       SCANLINE_DRAW_STEP = STEP_PER_SCANLINE * 256 / 341;
+
+  DrawAtLineStart = false;
+  for (uint32_t dwCrc : Line_Start_Draw_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      DrawAtLineStart = true;
+
+  PPU_NmiOnEnable = false;
+  for (uint32_t dwCrc : Nmi_On_Enable_Crcs)
+    if (dwCrc == InfoNES_RomCrc)
+      PPU_NmiOnEnable = true;
 }
 
 int InfoNES_GetRegion()
@@ -1040,6 +1088,10 @@ void __not_in_flash_func(InfoNES_Cycle)()
     bool bSpriteHit = SpriteJustHit == PPU_Scanline &&
                       PPU_ScanTable[PPU_Scanline] == SCAN_ON_SCREEN;
 
+    // Line_Start_Draw_Crcs: the line is drawn before its CPU slice runs
+    if (DrawAtLineStart)
+      InfoNES_HSyncDraw();
+
     if (SCANLINE_DRAW_STEP)
     {
       // Hblank_Draw_Crcs: draw the line where its visible part ends, and run
@@ -1148,8 +1200,9 @@ int __not_in_flash_func(InfoNES_HSync)()
   // PPU_Scr_V_Bit = tmpv & 7;
   // PPU_Scr_V_Byte = (tmpv >> 3) & 31;
 
-  // Drawn in InfoNES_Cycle() instead for the ROMs in Hblank_Draw_Crcs
-  if (!SCANLINE_DRAW_STEP)
+  // Drawn in InfoNES_Cycle() instead for the ROMs in Hblank_Draw_Crcs and
+  // Line_Start_Draw_Crcs
+  if (!SCANLINE_DRAW_STEP && !DrawAtLineStart)
     InfoNES_HSyncDraw();
 
   util::WorkMeterReset(); // 計測起点はここ
@@ -2034,6 +2087,97 @@ void __not_in_flash_func(InfoNES_DrawLine)()
   }
 }
 
+/* The scanline on which sprite 0 really hits: the first one where an opaque
+   pixel of the sprite lies over an opaque background pixel. Upstream InfoNES
+   took the first opaque row of the sprite alone. Nekketsu Kouha Kunio-kun
+   uses the heart in its status bar as sprite 0; the background under its top
+   six rows is empty, so the hit came six lines early and the playfield scroll
+   cut through the bottom row of the status bar.
+
+   The background is taken as it stands at the top of the frame: the scroll in
+   v, advanced line by line the way InfoNES_HSync() does, and the current name
+   tables and pattern banks. A game that changes any of these before the sprite
+   0 line could make this miss, so -1 (no overlap found) keeps the first opaque
+   row: a hit that comes early is a glitch, one that never comes hangs the game
+   in its $2002 loop. nFirstRow is that first opaque row. */
+static int __not_in_flash_func(InfoNES_SprHitBgLine)(int nFirstRow)
+{
+  // MMC5 extended attributes take each tile's bank from ExRAM; not modelled.
+  if (Map5_Gfx_Mode == 1)
+    return -1;
+
+  // Neither layer is drawn in the left 8 pixels when either one is clipped.
+  const int nLeft = ((PPU_R1 & R1_CLIP_BG) && (PPU_R1 & R1_CLIP_SP)) ? 0 : 8;
+  const int bankOfsBG = PPU_R0 & R0_BG_ADDR ? 4 : 0;
+  const int bankOfsSP88 = PPU_R0 & R0_SP_ADDR ? 4 : 0;
+  const bool bVFlip = SPRRAM[SPR_ATTR] & SPR_ATTR_V_FLIP;
+  const bool bHFlip = SPRRAM[SPR_ATTR] & SPR_ATTR_H_FLIP;
+  const int nTop = SPRRAM[SPR_Y] + 1;
+
+  int ch = SPRRAM[SPR_CHR];
+  int bankOfs = bankOfsSP88;
+  if (PPU_R0 & R0_SP_SIZE)
+  {
+    bankOfs = (ch & 1) << 2;
+    ch &= 0xfe;
+  }
+
+  // Fine and coarse Y of v as one 0-255 value, plus the vertical name table bit.
+  // advance(n) is n lines of InfoNES_HSync(): past row 29 to row 0 of the other
+  // name table, past rows 30-31 (attribute bytes) to row 0 of the same one.
+  int nYv = ((PPU_Addr >> 12) & 7) | ((PPU_Addr >> 2) & (31 << 3));
+  int nNtV = (PPU_Addr >> 11) & 1;
+  auto advance = [&](int n) {
+    if (nYv >= 240)
+    {
+      if (n < 256 - nYv)
+      {
+        nYv += n;
+        return;
+      }
+      n -= 256 - nYv;
+      nYv = 0;
+    }
+    while (n >= 240 - nYv)
+    {
+      n -= 240 - nYv;
+      nYv = 0;
+      nNtV ^= 1;
+    }
+    nYv += n;
+  };
+  advance(nTop + nFirstRow);
+
+  // Pixel 0 of the line, counted from the left edge of the horizontal name table in v
+  const int nPos0 = ((PPU_Addr & 31) << 3) + PPU_Scr_H_Bit;
+  const int nNtH = (PPU_Addr >> 10) & 1;
+
+  for (int nRow = nFirstRow; nRow < PPU_SP_Height && nTop + nRow < SCAN_UNKNOWN_START; ++nRow)
+  {
+    const int y = bVFlip ? PPU_SP_Height - 1 - nRow : nRow;
+    const BYTE *sp = PPUBANK[(ch >> 6) + bankOfs] + ((ch & 63) << 4) + ((y & 8) << 1) + (y & 7);
+    const int nSpr = sp[0] | sp[8];
+
+    for (int nCol = 0; nSpr && nCol < 8; ++nCol)
+    {
+      const int nX = SPRRAM[SPR_X] + nCol;
+      if (nX < nLeft || nX >= 255) // no hit at x = 255 either
+        continue;
+      if (!((nSpr >> (bHFlip ? nCol : 7 - nCol)) & 1))
+        continue;
+
+      const int nPos = nPos0 + nX;
+      const int nNt = (nNtV << 1) | (nNtH ^ ((nPos >> 8) & 1));
+      const int tile = PPUBANK[NAME_TABLE0 + nNt][(nYv >> 3) * 32 + ((nPos >> 3) & 31)];
+      const BYTE *bg = PPUBANK[(tile >> 6) + bankOfsBG] + ((tile & 63) << 4) + (nYv & 7);
+      if (((bg[0] | bg[8]) >> (7 - (nPos & 7))) & 1)
+        return nTop + nRow;
+    }
+    advance(1);
+  }
+  return -1;
+}
+
 /*===================================================================*/
 /*                                                                   */
 /* InfoNES_GetSprHitY() : Get a position of scanline hits sprite #0  */
@@ -2153,6 +2297,9 @@ void __not_in_flash_func(InfoNES_GetSprHitY)()
       {
         // Scanline hits sprite #0
         SpriteJustHit = SPRRAM[SPR_Y] + 1 + nLine;
+        int nBgLine = InfoNES_SprHitBgLine(nLine);
+        if (nBgLine >= 0)
+          SpriteJustHit = nBgLine;
         nLine = SCAN_VBLANK_END;
       }
       data += stride;

@@ -92,4 +92,7 @@ uint32_t K6502_Now();
 // End the running K6502_Step slice on this cycle (the DMC IRQ)
 void K6502_BreakAt(bool enable, uint32_t cycle);
 
+// Raise an NMI from inside an instruction; it is taken after that instruction
+void K6502_RaiseNmi();
+
 #endif /* !K6502_H_INCLUDED */

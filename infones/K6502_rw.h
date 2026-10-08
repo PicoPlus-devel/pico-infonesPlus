@@ -291,6 +291,11 @@ static inline void __not_in_flash_func(K6502_Write)(WORD wAddr, BYTE byData)
     switch (wAddr & 0x7)
     {
     case 0: /* 0x2000 */
+      // The PPU's NMI output is the enable bit ANDed with the vblank flag,
+      // so enabling it while the flag is still set raises an NMI at once.
+      // Only for the ROMs in Nmi_On_Enable_Crcs (InfoNES.cpp).
+      if (PPU_NmiOnEnable && (byData & ~PPU_R0 & R0_NMI_VB) && (PPU_R2 & R2_IN_VBLANK))
+        K6502_RaiseNmi();
       PPU_R0 = byData;
       PPU_Increment = (PPU_R0 & R0_INC_ADDR) ? 32 : 1;
       PPU_NameTableBank = NAME_TABLE0 + (PPU_R0 & R0_NAME_ADDR);

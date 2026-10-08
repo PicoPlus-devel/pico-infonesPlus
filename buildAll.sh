@@ -37,7 +37,7 @@ done
 # build for Pico 2 (w) -arm-s
 # No pico2_w binaries for HWConfig 1 (#132)
 # no pico_w binaries for HWConfig 2 (#136)
-HWCONFIGS="1 2 5 6 7 8 9 10 12 13"
+HWCONFIGS="1 2 5 6 7 8 9 10 12 13 15"
 for HWCONFIG in $HWCONFIGS
 do
 	./bld.sh -c $HWCONFIG -2 || exit 1

@@ -116,6 +116,7 @@ int8_t g_settings_visibility_nes[MOPT_COUNT] = {
     [MOPT_GENESIS_PAD]             = 0,                    // Genesis pad type (Genesis only)
     [MOPT_NES_PALETTE]             = 1,                    // Color palette (menu.cpp lists it after Scanline Type)
     [MOPT_HSTX_CLOCK_FIX]          = 0,                    // Video Clock Fix (set at runtime together with Overclock)
+    [MOPT_BUTTON_LAYOUT]           = 1,                    // Button layout NES/SNES (menu.cpp lists it before Rapid Fire on A)
 };
 // #if defined(__riscv)
 // const uint8_t g_available_screen_modes[] = {
@@ -411,16 +412,23 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
 
     ++rapidFireCounter;
 
+    // Button Layout = SNES: on a pad with four face buttons NES B and A are the left
+    // and bottom button (SNES Y and B, Nintendo's own mapping for NES games) instead
+    // of the bottom and right one. Only the game sees that: v below keeps the NES
+    // layout for the hotkeys, so they work in both layouts like the menu does.
+    const bool snesLayout = settings.flags.snesButtonLayout;
+
 #if NES_PIN_CLK != -1
     // Buttons of a GPIO pad in NES order. A NES pad shifts them out that way
     // already; a SNES pad puts its B and Y in the A and B slots, so its face
     // buttons are named instead of taken positionally: physical A drives NES A
     // and physical B drives NES B, the same as on USB and Wii Classic pads, and
     // the same buttons the menu uses to choose and go back. X, Y, L and R have
-    // no NES equivalent and are ignored there too.
-    auto nespadGameBits = [](int padnum) -> int
+    // no NES equivalent and are ignored there too. In the SNES layout the pad is
+    // taken positionally after all, which is exactly SNES B and Y as NES A and B.
+    auto nespadGameBits = [](int padnum, bool layoutSnes) -> int
     {
-        if (nespad_padtype[padnum] != NESPAD_TYPE_SNES)
+        if (layoutSnes || nespad_padtype[padnum] != NESPAD_TYPE_SNES)
         {
             return nespad_states[padnum];
         }
@@ -430,6 +438,13 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
         if (ext & (1u << 0)) v |= B;
         return v;
     };
+#endif
+#if WII_PIN_SDA >= 0 and WII_PIN_SCL >= 0
+    // wiipad_read() has b (bottom) in bit 1 and y (left) in bit 9.
+    const int wiiGameBits = snesLayout ? ((wiipad_raw_cached & ~(A | B)) |
+                                          (wiipad_raw_cached & B ? A : 0) |
+                                          (wiipad_raw_cached & (1 << 9) ? B : 0))
+                                       : wiipad_raw_cached;
 #endif
 
     bool usbConnected = false;
@@ -450,18 +465,29 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
                 (gp.buttons & io::GamePadState::Button::SELECT ? SELECT : 0) |
                 (gp.buttons & io::GamePadState::Button::START ? START : 0) |
                 0;
+        // g: what the game sees. Button::B and Button::Y are the bottom and left
+        // button of the pads that set snesFaceButtons.
+        int g = v;
+        if (snesLayout && gp.snesFaceButtons)
+        {
+            g = (v & ~(A | B)) |
+                (gp.buttons & io::GamePadState::Button::B ? A : 0) |
+                (gp.buttons & io::GamePadState::Button::Y ? B : 0);
+        }
 #if NES_PIN_CLK != -1
         // When USB controller is connected both NES ports act as controller 2
         if (usbConnected)
         {
             if (i == 1)
             {
-                v = v | nespadGameBits(1) | nespadGameBits(0);
+                v = v | nespadGameBits(1, false) | nespadGameBits(0, false);
+                g = g | nespadGameBits(1, snesLayout) | nespadGameBits(0, snesLayout);
             }
         }
         else
         {
-            v |= nespadGameBits(i);
+            v |= nespadGameBits(i, false);
+            g |= nespadGameBits(i, snesLayout);
         }
 #endif
 
@@ -472,6 +498,7 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
             if (i == 1)
             {
                 v |= wiipad_raw_cached;
+                g |= wiiGameBits;
             }
         }
         else // if no USB controller is connected, wiipad acts as controller 1
@@ -479,11 +506,14 @@ void InfoNES_PadState(DWORD *pdwPad1, DWORD *pdwPad2, DWORD *pdwSystem)
             if (i == 0)
             {
                 v |= wiipad_raw_cached;
+                g |= wiiGameBits;
             }
         }
 #endif
 
-        int rv = v;
+        // Only the 8 NES buttons: the Wii pad reports X, Y, L and R above them,
+        // and the core shifts bits 8-23 of the latch out to the game as well.
+        int rv = g & 0xff;
         rapidFireMask[i] = (settings.flags.rapidFireOnA ? A : 0) |
                            (settings.flags.rapidFireOnB ? B : 0);
         if (rapidFireCounter & 2)
