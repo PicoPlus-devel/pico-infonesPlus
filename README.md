@@ -966,7 +966,7 @@ Flash **[piconesPlus_OlimexPicoPC_arm.uf2](https://github.com/PicoPlus-devel/pic
 
 - **Sound:** through HDMI and the audio jack at the same time.
 - **Controllers:** a USB controller or USB keyboard on the USB-A port. A NES or SNES controller can be connected to the UEXT connector: clock on GPIO 5, latch on GPIO 9 and data on GPIO 20. There is no second controller port, no Wii Classic controller support and no NES Zapper support.
-- **PSRAM:** the board has room for an optional PSRAM chip (chip select on GPIO 8). Without it, a game is written to flash before it starts. The **Overclock** and [Video Clock Fix](#video-clock-fix) settings are only offered with PSRAM fitted. With Video Clock Fix enabled the USB-A port no longer works for controllers, so a NES or SNES controller on the UEXT connector is needed.
+- **PSRAM:** the board has room for an optional PSRAM chip (chip select on GPIO 8). Without it, a game is written to flash before it starts. The **Overclock** setting is only offered with PSRAM fitted.
 - **Pico 2 W:** there is no Pico 2 W binary. On a Pico 2 W, GPIO 23, which this build uses to reduce noise on the audio jack, is connected to the wireless chip.
 
 Support for this board was contributed by [DnCraptor](https://github.com/DnCraptor).
@@ -1065,8 +1065,7 @@ running. Not every entry is available on every board or in every situation.
 | FDS Auto Swap Disk side | Swap the disk side automatically when the game asks for it. Off by default. FDS games only. |
 | FDS Auto Insert Disk 1 On Start | Insert disk 1 automatically at start. On by default. FDS games only. |
 | Sprite Limit (8 per line) | Draw at most 8 sprites per scanline, as the NES does. On by default. Turning it off reduces sprite flicker, but a few games rely on the limit, for example *Felix the Cat*. |
-| Overclock | Raise the CPU clock from 252 MHz to 378 MHz. Only on HSTX boards with PSRAM, and currently only needed for *Lagrange Point (JP)*. Menu only, not available in-game. |
-| Video Clock Fix | Turn this on if the TV or monitor shows small dots or lines in the picture at 378 MHz. A USB controller can then no longer be used. Offered together with Overclock, on boards without a second USB port. Menu only, not available in-game. See [Video Clock Fix](#video-clock-fix). |
+| Overclock | Raise the CPU clock from 252 MHz to 384 MHz. Only on HSTX boards with PSRAM, and currently only needed for *Lagrange Point (JP)*. Menu only, not available in-game. |
 | Controller Test | Show a gamepad graphic that follows the controller you last pressed a button on, plus a list of connected input sources. Useful for checking wiring and button mappings. Hold SELECT + UP for 2 seconds to exit. |
 | Enter BOOTSEL Mode | Reboot into BOOTSEL so you can flash new firmware. |
 | USB Drive Mode | Show the SD card on a computer as a USB drive, so games can be added or removed without taking the card out. See [USB drive mode](#usb-drive-mode). Menu only, not available in-game. |
@@ -1074,19 +1073,6 @@ running. Not every entry is available on every board or in every situation.
 
 > [!NOTE]
 > Changes are only applied when you select **SAVE**. **CANCEL** discards them, **DEFAULT** restores the default values. Press SELECT to jump directly to **SAVE**.
-
-## Video Clock Fix
-
-At 378 MHz the HDMI output clock is derived from the CPU clock, and some TVs and monitors then show small dots or short dotted lines in the picture. The emulator runs at that clock when the **Overclock** setting is on. Taking the HDMI clock from the clock source of the built-in USB port avoids this, but leaves that port without a usable clock.
-
-- Boards that connect USB controllers to a second USB port, such as the Adafruit Fruit Jam, always do this. Nothing is lost on these boards.
-- Boards with HSTX video whose only USB port is the board's own, such as a Pico 2 or Pimoroni Pico Plus 2 with the Adafruit DVI breakout, the Adafruit Metro RP2350, the Murmulator M2 and the Olimex RP2040-PICO-PC, offer it as a setting: **Video Clock Fix**, in the settings menu of the main menu, below Overclock. It is off by default. It is only offered where Overclock is, on boards with PSRAM.
-- Boards with PicoDVI video are not affected and do not offer the setting.
-
-> [!IMPORTANT]
-> With Video Clock Fix enabled, the built-in USB port can no longer be used for a gamepad, keyboard or mouse. Use a NES, SNES or Wii Classic controller on the GPIO controller ports instead. The port still powers the board, and USB drive mode remains available.
-
-The setting can only be enabled while a NES, SNES or Wii Classic controller is detected; otherwise an error message is shown. An original SNES controller is detected right away; some third-party SNES controllers only after a button on them has been pressed. Enabling the setting shows a warning first; confirming it restarts the board. To disable it, set it to OFF in the settings menu. If no working controller is available, delete `settings_NES.dat` from the root of the SD card on a computer: on the next start the board disables the fix and restarts once.
 
 ## Color palettes
 

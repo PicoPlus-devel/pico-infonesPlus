@@ -1,6 +1,6 @@
 # CHANGELOG
 
-USB controllers on the Adafruit Fruit Jam and other boards with PIO-USB are now found at every start.
+**v0.55** removes the small dots or lines some TVs and monitors showed in the picture with Overclock on, while the built-in USB port keeps working, and finds USB controllers at every start on the Adafruit Fruit Jam and other boards with PIO-USB.
 
 # General Info
 
@@ -20,10 +20,16 @@ Keep in mind that `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then 
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
-# v0.54.2
+# v0.55
+
+## Changes
+
+- **The Video Clock Fix setting has been removed.** It is no longer needed, see below. On a board where it was turned on, a USB controller on the built-in USB port works again.
+- **Overclock** now raises the CPU clock to 384 MHz instead of 378 MHz. See [Overclock](https://github.com/PicoPlus-devel/pico-infonesPlus#settings-menu) in the settings menu.
 
 ## Fixes
 
+- **No more dots or lines in the picture with Overclock on.** On boards with HSTX video, some TVs and monitors showed small dots or short dotted lines, for example on dark screens, while Overclock was on. The picture is now clean, and the built-in USB port can still be used for controllers and USB drive mode. Thanks to @szuping for the hint that led to this fix.
 - **USB controllers on the Adafruit Fruit Jam and other boards with PIO-USB are now found at every start.** On boards with an older RP2350 chip they were often not detected.
 
 # v0.54.1
@@ -59,7 +65,7 @@ The binaries are the same as in v0.54.
 - The Limited Run Games versions of Star Wars and Star Wars - The Empire Strikes Back now run on RP2350 boards with PSRAM.
 - Nintendo Campus Challenge 1991 (mapper 555) now runs. Press START on the title screen to begin the five-minute competition.
 - Nine color palettes to choose from, under **NES Palette** in the settings menu or with START + LEFT/RIGHT during play. Includes the FirebrandX palettes and *Bubbles*, a less saturated one for LCD and OLED screens ([#256](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/256)). See [Color palettes](https://github.com/PicoPlus-devel/pico-infonesPlus#color-palettes). On the Fruit Jam these buttons no longer change the volume; use **Fruit Jam Volume Control** in the settings menu. Thanks to [dragonkn9](https://github.com/dragonkn9) for the Bubbles palette, [szuping](https://github.com/szuping) for the FirebrandX palettes and [chubunov](https://github.com/chubunov) for testing.
-- New **Video Clock Fix** setting (boards with HSTX video whose only USB port is the board's own, such as the Pimoroni Pico Plus 2, the Adafruit Metro RP2350 and the Murmulator M2). Turn it on if your TV or monitor shows small dots or lines in the picture with Overclock on. A USB controller can then no longer be used; use a NES, SNES or Wii controller instead. See [Video Clock Fix](https://github.com/PicoPlus-devel/pico-infonesPlus#video-clock-fix).
+- ~~New **Video Clock Fix** setting (boards with HSTX video whose only USB port is the board's own, such as the Pimoroni Pico Plus 2, the Adafruit Metro RP2350 and the Murmulator M2). Turn it on if your TV or monitor shows small dots or lines in the picture with Overclock on. A USB controller can then no longer be used; use a NES, SNES or Wii controller instead.~~ Removed in v0.55.
 - All settings return to their defaults once after updating to this version.
 
 ## Fixes

@@ -288,7 +288,6 @@ target_compile_definitions(${projectname} PRIVATE
     WIIPAD_DELAYED_START=${WIIPAD_DELAYED_START}
     ENABLEDVI=1
     DOUBLEFRAMEBUFFER=0
-    NES_OVERCLOCK_FIX=1
     #HSTX_DEBUG=1
 )
 
