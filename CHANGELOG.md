@@ -26,6 +26,7 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 
 - **The Video Clock Fix setting has been removed.** It is no longer needed, see below. On a board where it was turned on, a USB controller on the built-in USB port works again.
 - **Overclock** now raises the CPU clock to 384 MHz instead of 378 MHz. See [Overclock](https://github.com/PicoPlus-devel/pico-infonesPlus#settings-menu) in the settings menu.
+- **USB keyboard in the menus.** Enter selects and Esc goes back.
 
 ## Fixes
 
