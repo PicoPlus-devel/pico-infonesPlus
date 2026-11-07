@@ -345,7 +345,6 @@ if(DEFINED PICO_DEFAULT_UART_TX_PIN)
     message(STATUS "Using PICO_DEFAULT_UART_TX_PIN: ${PICO_DEFAULT_UART_TX_PIN}")
     target_compile_definitions(${projectname} PRIVATE
         PICO_DEFAULT_UART_TX_PIN=${PICO_DEFAULT_UART_TX_PIN}
-        PICO_DEFAULT_UART=0
     )
 endif()
 
