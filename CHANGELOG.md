@@ -1,6 +1,6 @@
 # CHANGELOG
 
-**v0.55** removes the small dots or lines some TVs and monitors showed in the picture with Overclock on, while the built-in USB port keeps working, and finds USB controllers at every start on the Adafruit Fruit Jam and other boards with PIO-USB.
+**v0.56** adds support for the Pico Computer 3.
 
 # General Info
 
@@ -19,6 +19,17 @@ This can be fixed permanently with the [flash_config](https://github.com/fhoedem
 Keep in mind that `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then requires erasing the flash with `universal_flash_nuke.uf2` first).
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
+
+# v0.56
+
+## New
+
+- Support for the [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3): HDMI, sound through the audio jack, USB controllers, PSRAM, and NES or SNES controllers, a NES Zapper and a Wii Classic controller on the I/O header. The pin assignment may still change. See [Pico Computer 3](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-computer-3). Thanks to @javavi.
+
+## Changes
+
+- NES and SNES controllers on the controller ports are now read with the same timing as a real console, on all boards. Thanks to @javavi.
+- Under pico-bootLoader, the settings menu entry that goes back to the bootloader is now called **Return to boot loader**.
 
 # v0.55
 
@@ -217,6 +228,14 @@ For more info about the Murmulator see this website: https://murmulator.ru/ and 
 | Olimex RP2040-PICO-PC with a Pico 2 | [piconesPlus_OlimexPicoPC_arm.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_OlimexPicoPC_arm.uf2) | [Readme](README.md#olimex-rp2040-pico-pc) |
 
 There is no Pico 2 W binary for this board.
+
+### Pico Computer 3
+
+For more info about the Pico Computer 3 see https://github.com/UKTailwind/Pico-Computer-3
+
+| Board | Binary | Readme |
+|:--|:--|:--|
+| Pico Computer 3 (PC3) | [piconesPlus_PicoComputer3_arm.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_PicoComputer3_arm.uf2) | [Readme](README.md#pico-computer-3) |
 
 ### Other downloads
 

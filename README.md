@@ -122,6 +122,8 @@ See the downloads on the releases page for the correct binary to use with these 
 
 - [Olimex RP2040-PICO-PC](https://www.olimex.com/Products/MicroPython/PICO/RP2040-PICO-PC/) fitted with a Raspberry Pi Pico 2. For use with a USB game controller and a NES or SNES controller on the UEXT connector. See [Olimex RP2040-PICO-PC](#olimex-rp2040-pico-pc).
 
+- [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3) (PC3), an RP2350B board with HDMI, an audio jack, a USB hub, PSRAM and an I/O header for NES or SNES controllers. See [Pico Computer 3](#pico-computer-3).
+
 [See below to see how to set up your specific configuration.](#setup)
 
 
@@ -156,8 +158,8 @@ For more info, see [pio_usb.md](pio_usb.md).
 ### Legacy controllers
 - One or optionally two original NES controllers for two player games.  In some configurations, soldering is required.
 - Original SNES controllers can be connected to the NES controller port(s) as well. The emulator detects automatically whether an NES or a SNES controller is attached, so no configuration is needed.
-- Wii Classic controller: Adafruit Feather RP2040, WaveShare RP2040 Pi-Zero, Adafruit Metro RP2350, Adafruit Fruit Jam boards only
-- NES Zapper (light gun): [custom PCB](#nes-zapper-light-gun) design v2.1 or later only, in controller port 2. Not available on the other configurations - GPIO27 and GPIO28 are already in use there, and the Murmulator M1/M2 boards leave the controller ports' D3 and D4 unconnected altogether. Needs LCD-lag-corrected ROM patches **and** a third-party gun such as the Tomee Zapp Gun; an original Nintendo Zapper does not work on a flat panel without a hardware modification. See the [NES Zapper](#nes-zapper-light-gun) section.
+- Wii Classic controller: Adafruit Feather RP2040, WaveShare RP2040 Pi-Zero, Adafruit Metro RP2350, Adafruit Fruit Jam and Pico Computer 3 boards only
+- NES Zapper (light gun): [custom PCB](#nes-zapper-light-gun) design v2.1 or later, in controller port 2, and the [Pico Computer 3](#pico-computer-3) only. Not available on the other configurations - GPIO27 and GPIO28 are already in use there, and the Murmulator M1/M2 boards leave the controller ports' D3 and D4 unconnected altogether. Needs LCD-lag-corrected ROM patches **and** a third-party gun such as the Tomee Zapp Gun; an original Nintendo Zapper does not work on a flat panel without a hardware modification. See the [NES Zapper](#nes-zapper-light-gun) section.
       
 Parts list for legacy controllers
   * NES or SNES controller. A second controller port and controller is optional and only needed if you want to play two player games using legacy controllers. Two player games can also be played with a USB controller and a legacy controller.
@@ -207,6 +209,7 @@ With PSRAM, this step is no longer needed. Games are loaded directly from the SD
 | [Adafruit Metro RP2350 with PSRAM](https://www.adafruit.com/product/6267) | Yes – pre-installed |
 | [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2) | Yes – pre-installed |
 | [Adafruit Fruit Jam](https://www.adafruit.com/product/6200) | Yes - pre-installed |
+| [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3) | Yes - pre-installed |
 
 ## PSRAM with a non-Winbond flash chip
 
@@ -259,6 +262,7 @@ Click on the link below for your specific board configuration:
   * [PCB with WaveShare RP2040/RP2350 Zero](#pcb-with-waveshare-rp2040rp2350-zero)
   * [PCB with WaveShare RP2350 USB A](#pcb-with-waveshare-rp2350-usb-a)
 - [Olimex RP2040-PICO-PC with a Pico 2](#olimex-rp2040-pico-pc)
+- [Pico Computer 3](#pico-computer-3)
 - (Discontinued) [Raspberry Pi Pico or Pico 2, setup for Pimoroni Pico DV Demo Base](#raspberry-pi-pico-or-pico-2-setup-for-pimoroni-pico-dv-demo-base)
 
 The SpotPear HDMI board and the Murmulator M1/M2 boards are supported as well, but have no setup section here. Flash `piconesPlus_SpotpearHDMI_pico_arm.uf2` / `piconesPlus_SpotpearHDMI_pico2_arm.uf2`, or `piconesPlus_MurmulatorM1_pico_arm.uf2` / `piconesPlus_MurmulatorM1_pico2_arm.uf2` / `piconesPlus_MurmulatorM2_arm.uf2` from the [releases page](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest) and wire the board according to its own documentation.
@@ -971,6 +975,34 @@ Flash **[piconesPlus_OlimexPicoPC_arm.uf2](https://github.com/PicoPlus-devel/pic
 
 Support for this board was contributed by [DnCraptor](https://github.com/DnCraptor).
 
+***
+
+## Pico Computer 3
+
+The [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3) (PC3) is an RP2350B computer board with an HDMI connector, a microSD card slot, 8 MB PSRAM, a USB hub and an audio jack.
+
+Design files, schematics and parts lists: https://github.com/UKTailwind/Pico-Computer-3
+
+> [!NOTE]
+> Support for this board is new. The pin assignment and other details below may change in a future release.
+
+Flash **[piconesPlus_PicoComputer3_arm.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_PicoComputer3_arm.uf2)** from the [releases page](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest).
+
+- **Sound:** through the audio jack.
+- **USB:** USB controllers or a USB keyboard on the USB-A ports.
+- **NES or SNES controllers:** up to two, on the external I/O header H4:
+
+  | | Clock | Latch | Data |
+  |:--|:--|:--|:--|
+  | Port 1 | GPIO 0 | GPIO 1 | GPIO 2 |
+  | Port 2 | GPIO 3 | GPIO 4 | GPIO 5 |
+
+- **NES Zapper:** light sensor (D3) on GPIO 6 and trigger (D4) on GPIO 7. Games see it as a Zapper in controller port 2. See [NES Zapper (light gun)](#nes-zapper-light-gun) for the gun and the game patches it needs.
+- **Wii Classic controller:** on I2C0, SDA on GPIO 20 and SCL on GPIO 21.
+- **PSRAM:** fitted on the board. Games are loaded from the SD card into PSRAM.
+- **LED:** the heartbeat LED on GPIO 25 is used when jumper H5 is set to 1-2.
+
+Support for this board was contributed by [javavi](https://github.com/javavi).
 
 ***
 
@@ -1337,7 +1369,7 @@ Alongside this NES emulator, the bootloader can run the Game Boy, Sega Master Sy
 > [!NOTE]
 > pico-bootLoader requires an RP2350 board. Supported configurations are the Pimoroni Pico DV Demo Base, Adafruit DVI + SD breakout, Adafruit Metro RP2350, Waveshare RP2350-Zero with PCB, Waveshare RP2350-PiZero, Adafruit Fruit Jam, Waveshare RP2350-USB A, Murmulator M2 and the Adafruit Feather RP2350. See the bootloader's own readme for the current list and for the SD card layout.
 
-When the emulator runs under the bootloader, the settings menu gains an extra **Return to emulator selection** entry that takes you back to the picker.
+When the emulator runs under the bootloader, the settings menu gains an extra **Return to boot loader** entry that takes you back to the picker.
 
 If you do want to build the emulator for the bootloader yourself, use the `-b` flag described in [Building from source](#building-from-source). Those builds are relinked to the application partition at `0x10080000` and are written to the `releases_bl` folder instead of `releases`. Note that the regular binaries on this project's releases page are standalone builds and will **not** work under the bootloader.
 
@@ -1391,6 +1423,7 @@ Options:
      13: Murmulator M2 (rp2350 only)
      14: Adafruit Feather RP2350 with TLV320DAC3100 I2S DAC and sdcard breakout board and PIO USB.
      15: Olimex RP2040-PICO-PC with a Pico 2 (rp2350 only)
+     17: Pico Computer 3 (PC3): HSTX video, I2S audio, USB hub (rp2350 only)
   -m: Run cmake only, do not build the project
   -e: use the pico-extras based I2S audio driver (default: legacy custom driver)
   -h: display this help
@@ -1469,6 +1502,8 @@ Wii Classic controller support by [PaintYourDragon](https://github.com/PaintYour
 Adafruit Feather DVI - RP2040 support by [PaintYourDragon](https://github.com/PaintYourDragon) & [Adafruit](https://github.com/adafruit).
 
 Olimex RP2040-PICO-PC support, including sound through its audio jack, by [DnCraptor](https://github.com/DnCraptor).
+
+Pico Computer 3 support, and the NES controller reading code used on all boards, by [javavi](https://github.com/javavi).
 
 XInput driver: https://github.com/Ryzee119/tusb_XInput by [Ryzee119](https://github.com/Ryzee119)
 
