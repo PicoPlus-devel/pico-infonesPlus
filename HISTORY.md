@@ -1,5 +1,68 @@
 # History of changes
 
+# v0.55
+
+## Changes
+
+- **The Video Clock Fix setting has been removed.** It is no longer needed, see below. On a board where it was turned on, a USB controller on the built-in USB port works again.
+- **Overclock** now raises the CPU clock to 384 MHz instead of 378 MHz. See [Overclock](https://github.com/PicoPlus-devel/pico-infonesPlus#settings-menu) in the settings menu.
+- **USB keyboard in the menus.** Enter selects and Esc goes back.
+
+## Fixes
+
+- **No more dots or lines in the picture with Overclock on.** On boards with HSTX video, some TVs and monitors showed small dots or short dotted lines, for example on dark screens, while Overclock was on. The picture is now clean, and the built-in USB port can still be used for controllers and USB drive mode. Thanks to @szuping for the hint that led to this fix.
+- **USB controllers on the Adafruit Fruit Jam and other boards with PIO-USB are now found at every start.** On boards with an older RP2350 chip they were often not detected.
+
+# v0.54.1
+
+## New
+
+- PCB design v2.8 with two SNES controller ports, designed by John Park ([@johnedgarpark](https://twitter.com/johnedgarpark)). The Gerber file `pico_nesPCB_v2.8_SNES_PORTS.zip` is attached below.
+- All PCB designs, with parts lists and pictures, are now described in the [PCB README](https://github.com/PicoPlus-devel/pico_shared/blob/main/PCB/README.md).
+
+The binaries are the same as in v0.54.
+
+# v0.54
+
+## New
+
+- New setting **Button Layout**: with **SNES**, controllers with four face buttons use Y and B (Xbox: X and A, PlayStation: Square and Cross) as the NES B and A buttons ([#260](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/260)).
+- Support for the [Olimex RP2040-PICO-PC](https://www.olimex.com/Products/MicroPython/PICO/RP2040-PICO-PC/) with a Raspberry Pi Pico 2: HDMI, sound through HDMI and the audio jack, a USB controller and a NES or SNES controller on the UEXT connector. See [Olimex RP2040-PICO-PC](https://github.com/PicoPlus-devel/pico-infonesPlus#olimex-rp2040-pico-pc). Thanks to [DnCraptor](https://github.com/DnCraptor).
+
+## Fixes
+
+- SNES controller on the controller port: the first press of B no longer acts as A after a restart or after starting a game.
+- Nekketsu Kouha Kunio-kun: part of the status bar scrolled along with the playfield ([#182](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/182)).
+- Castlevania III and Akumajou Densetsu: the bottom of the status bar scrolled along with the playfield.
+- Nekketsu Koukou Dodgeball-bu: the status bar flickered.
+- *Bubbles* palette: updated colors. Thanks to [dragonkn9](https://github.com/dragonkn9).
+
+# v0.53
+
+## New
+
+- Mappers 152 and 207 are now supported: Saint Seiya - Ougon Densetsu, Arkanoid II, Gegege no Kitarou 2, Pocket Zaurus and newer dumps of Fudou Myouou Den.
+- Mappers 37, 153, 154, 155, 157, 159 and 268 are now supported: Super Mario Bros. + Tetris + Nintendo World Cup, Famicom Jump II, Devil Man, the Datach games, SD Gundam Gaiden - Knight Gundam Monogatari, Magical Taruruuto-kun and several unlicensed games. Saving works in the games that have it ([#250](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/250), [#253](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/253)).
+- The Limited Run Games versions of Star Wars and Star Wars - The Empire Strikes Back now run on RP2350 boards with PSRAM.
+- Nintendo Campus Challenge 1991 (mapper 555) now runs. Press START on the title screen to begin the five-minute competition.
+- Nine color palettes to choose from, under **NES Palette** in the settings menu or with START + LEFT/RIGHT during play. Includes the FirebrandX palettes and *Bubbles*, a less saturated one for LCD and OLED screens ([#256](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/256)). See [Color palettes](https://github.com/PicoPlus-devel/pico-infonesPlus#color-palettes). On the Fruit Jam these buttons no longer change the volume; use **Fruit Jam Volume Control** in the settings menu. Thanks to [dragonkn9](https://github.com/dragonkn9) for the Bubbles palette, [szuping](https://github.com/szuping) for the FirebrandX palettes and [chubunov](https://github.com/chubunov) for testing.
+- ~~New **Video Clock Fix** setting (boards with HSTX video whose only USB port is the board's own, such as the Pimoroni Pico Plus 2, the Adafruit Metro RP2350 and the Murmulator M2). Turn it on if your TV or monitor shows small dots or lines in the picture with Overclock on. A USB controller can then no longer be used; use a NES, SNES or Wii controller instead.~~ Removed in v0.55.
+- All settings return to their defaults once after updating to this version.
+
+## Fixes
+
+- Kyonshiizu 2, Mirai Shinwa Jarvas, Kyuukyoku Harikiri Stadium, Kamen Rider Club and Family Trainer 6 showed garbled or misplaced backgrounds.
+- Dragon Ball Z - Kyoushuu! Saiya Jin: saving did not work ([#249](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/249)).
+- Bible Buffet, Spiritual Warfare, Joshua, King of Kings and Sunday Funday showed garbled graphics or a black screen. Also fixed: Wally Bear and the No! Gang, Galactic Crusader and Mission Cobra.
+- The **Controller Test** screen is now closed by holding SELECT + UP for 2 seconds. SELECT + START conflicted with some 8BitDo wireless controllers ([#255](https://github.com/PicoPlus-devel/pico-infonesPlus/issues/255)).
+- The **Overclock** setting always matches the speed the board runs at. It could show on while the board ran at the normal speed, or off while the board was still overclocked.
+- AliExpress SNES-style USB controllers: B did not work until Y had been pressed once.
+
+## Known issues
+
+- Datach games: scanning barcode cards is not supported.
+- *Over Obj*: a black bar appears in the middle of the screen during gameplay.
+
 # v0.52
 
 ## New
