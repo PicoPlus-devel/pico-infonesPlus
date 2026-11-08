@@ -1,6 +1,6 @@
 # CHANGELOG
 
-**v0.56** adds support for the Pico Computer 3.
+**v0.56.1** fixes flickering lines in DVI mode on boards with HSTX video.
 
 # General Info
 
@@ -20,20 +20,11 @@ Keep in mind that `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then 
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
-# v0.56
-
-## New
-
-- Support for the [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3): HDMI, sound through the audio jack, USB controllers, PSRAM, and NES or SNES controllers, a NES Zapper and a Wii Classic controller on the I/O header. The pin assignment may still change. See [Pico Computer 3](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-computer-3). Thanks to @javavi.
-
-## Changes
-
-- NES and SNES controllers on the controller ports are now read with the same timing as a real console, on all boards. Thanks to @javavi.
-- Under pico-bootLoader, the settings menu entry that goes back to the bootloader is now called **Return to boot loader**.
+# v0.56.1
 
 ## Fixes
 
-- Boards with HSTX video: with **Display Mode** set to DVI, the picture could randomly drop out.
+- Boards with HSTX video: with **Display Mode** set to DVI, now and then a single line could be shown shifted to the right for one frame.
 
 # previous changes
 
