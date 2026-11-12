@@ -1,20 +1,5 @@
 # History of changes
 
-# v0.56
-
-## New
-
-- Support for the [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3): HDMI, sound through the audio jack, USB controllers, PSRAM, and NES or SNES controllers, a NES Zapper and a Wii Classic controller on the I/O header. The pin assignment may still change. See [Pico Computer 3](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-computer-3). Thanks to @javavi.
-
-## Changes
-
-- NES and SNES controllers on the controller ports are now read with the same timing as a real console, on all boards. Thanks to @javavi.
-- Under pico-bootLoader, the settings menu entry that goes back to the bootloader is now called **Return to boot loader**.
-
-## Fixes
-
-- Boards with HSTX video: with **Display Mode** set to DVI, the picture could randomly drop out.
-
 # v0.55
 
 ## Changes

@@ -1,6 +1,6 @@
 # CHANGELOG
 
-**v0.56.1** fixes flickering lines in DVI mode on boards with HSTX video.
+**v0.56.1** adds support for a new PCB for the Waveshare RP2350-PiZero and fixes flickering lines in DVI mode on boards with HSTX video.
 
 # General Info
 
@@ -8,7 +8,7 @@
 
 [Click here for tested configurations](https://github.com/PicoPlus-devel/pico-infonesPlus/blob/main/testresults.md).
 
-[See setup section in readme how to install and wire up](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-setup)
+[See setup section in readme how to install and wire up](https://github.com/PicoPlus-devel/pico-infonesPlus#setup)
 
 ## PSRAM with a non-Winbond flash chip
 
@@ -22,9 +22,28 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 
 # v0.56.1
 
+## New
+
+- Support for a PCB for the Waveshare RP2350-PiZero, designed by @szuping: HDMI, sound through HDMI or the audio jack, NES and SNES controller ports, a NES Zapper, and a socket for an ESP32 module that connects Bluetooth controllers through [BlueRetro](https://github.com/darthcloud/blueretro). The PCB design is not yet available. See [PCB with Waveshare RP2350-PiZero](https://github.com/PicoPlus-devel/pico-infonesPlus#pcb-with-waveshare-rp2350-pizero).
+
 ## Fixes
 
 - Boards with HSTX video: with **Display Mode** set to DVI, now and then a single line could be shown shifted to the right for one frame.
+
+# v0.56
+
+## New
+
+- Support for the [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3): HDMI, sound through HDMI or the audio jack, USB controllers, PSRAM, and NES or SNES controllers, a NES Zapper and a Wii Classic controller on the I/O header. The pin assignment may still change. See [Pico Computer 3](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-computer-3). Thanks to @javavi.
+
+## Changes
+
+- NES and SNES controllers on the controller ports are now read with the same timing as a real console, on all boards. Thanks to @javavi.
+- Under pico-bootLoader, the settings menu entry that goes back to the bootloader is now called **Return to boot loader**.
+
+## Fixes
+
+- Boards with HSTX video: with **Display Mode** set to DVI, the picture could randomly drop out.
 
 # previous changes
 
@@ -111,6 +130,16 @@ PCB: [Gerber_PicoNES_Micro_v1.2.zip](https://github.com/PicoPlus-devel/pico-info
 [Readme](README.md#pcb-with-waveshare-rp2350-usb-a)
 
 [Build guide](https://www.instructables.com/PicoNES-RaspberryPi-Pico-Based-NES-Emulator/)
+
+### PCB Waveshare RP2350-PiZero
+
+| Board | Binary | Readme |
+|:--|:--|:--|
+| Waveshare RP2350-PiZero (*) | [piconesPlus_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2) | [Readme](README.md#pcb-with-waveshare-rp2350-pizero) |
+
+This binary is only for the RP2350-PiZero on this PCB. The PCB design is not yet available.
+
+(*) If you fitted this board with PSRAM and it has a non-Winbond flash chip, apply the [flash_config fix](#psram-with-a-non-winbond-flash-chip) before flashing the emulator.
 
 ### Pimoroni Pico DV
 

@@ -58,11 +58,11 @@ For detailed setup instructions, refer to the [Setup](#setup) section. For hardw
 
 There is also an emulator port for the Sega Master System/Sega Game Gear, Nintendo DMG Game Boy/Game Boy Color and Sega Mega Drive/Genesis. You can find them here:
 
-- Sega Master System/Game Gear: [https://github.com/fhoedemakers/pico-smsplus](https://github.com/fhoedemakers/pico-smsplus)
-- Nintendo DMG Game Boy and Game Boy Color: [https://github.com/fhoedemakers/pico-peanutGB](https://github.com/fhoedemakers/pico-peanutGB)
-- Sega Mega Drive/Genesis: [https://github.com/fhoedemakers/pico-genesisPlus](https://github.com/fhoedemakers/pico-genesisPlus)
-- If you have an [Adafruit Fruit Jam](https://www.adafruit.com/product/6200): See this multi emulator project: https://github.com/fhoedemakers/retroJam. Plays NES, Game Boy, Game Boy Color, Sega Master System, Sega Game Gear and Sega Genesis.
-- On any supported RP2350 board, [pico-bootLoader](https://github.com/fhoedemakers/pico-bootLoader) lets you install this emulator next to the ones above and pick between them from an on-screen menu. See [Running under pico-bootLoader](#running-under-pico-bootloader).
+- Sega Master System/Game Gear: [https://github.com/PicoPlus-devel/pico-smsplus](https://github.com/PicoPlus-devel/pico-smsplus)
+- Nintendo DMG Game Boy and Game Boy Color: [https://github.com/PicoPlus-devel/pico-peanutGB](https://github.com/PicoPlus-devel/pico-peanutGB)
+- Sega Mega Drive/Genesis: [https://github.com/PicoPlus-devel/pico-genesisPlus](https://github.com/PicoPlus-devel/pico-genesisPlus)
+- If you have an [Adafruit Fruit Jam](https://www.adafruit.com/product/6200): See this multi emulator project: https://github.com/PicoPlus-devel/retroJam. Plays NES, Game Boy, Game Boy Color, Sega Master System, Sega Game Gear and Sega Genesis.
+- On any supported RP2350 board, [pico-bootLoader](https://github.com/PicoPlus-devel/pico-bootLoader) lets you install this emulator next to the ones above and pick between them from an on-screen menu. See [Running under pico-bootLoader](#running-under-pico-bootloader).
 
 ***
 
@@ -83,6 +83,8 @@ You can use it with these RP2040/RP2350 boards and configurations:
   - [A smaller PCB design for the Waveshare RP2040-Zero or RP2350-Zero](#pcb-with-waveshare-rp2040rp2350-zero), with a 3D-printed case, designed by Gavin Knight ([DynaMight1124](https://github.com/DynaMight1124)). It uses cheaper components that are harder to solder, and is recommended for builders with good soldering skills.
 
   - [A very small PCB design for the Waveshare RP2350-USB-A](#pcb-with-waveshare-rp2350-usb-a), designed by Gavin Knight ([DynaMight1124](https://github.com/DynaMight1124)), for one player with a USB controller. It is the most difficult design to solder and requires micro-soldering skills.
+
+  - [A PCB design for the Waveshare RP2350-PiZero](#pcb-with-waveshare-rp2350-pizero), designed by Liu Szuping ([szuping](https://github.com/szuping)), with HDMI, an audio jack, NES and SNES controller ports, NES Zapper support and a socket for an ESP32 module for Bluetooth controllers. The design is not yet available.
 
 - Raspberry Pi Pico, Pico W, Pico 2, Pico 2 W or [Pimoroni Pico Plus 2](https://shop.pimoroni.com/products/pimoroni-pico-plus-2?variant=42092668289107) with male headers, on a breadboard with the [Adafruit DVI Breakout For HDMI Source Devices](https://www.adafruit.com/product/4984) and the [Adafruit Micro-SD breakout board+](https://www.adafruit.com/product/254). For use with a USB game controller or up to two legacy NES controllers. (No soldering required) See [Raspberry Pi Pico or Pico 2, setup with Adafruit hardware and breadboard](#raspberry-pi-pico-or-pico-2-setup-with-adafruit-hardware-and-breadboard).
  
@@ -867,6 +869,8 @@ Four printed circuit board (PCB) designs turn a supported microcontroller board 
 
 All boards require soldering.
 
+A fifth design, the [PCB for the Waveshare RP2350-PiZero](#pcb-with-waveshare-rp2350-pizero) by Liu Szuping, is supported by the emulator, but the design is not yet available.
+
 > [!NOTE]
 > Sellers on AliExpress have copied the PCB design and are selling pre-populated PCBs. For questions about those boards, please contact the seller on AliExpress.
 
@@ -894,9 +898,17 @@ For two-player games, connect two controllers to the controller ports, or connec
 ### NES Zapper (light gun)
 
 > [!NOTE]
-> Beta. Works on the **PCB only**, in **controller port 2**, and needs a **third-party light gun** such as the Tomee Zapp Gun - an original Nintendo Zapper will not work on a flat panel unmodified. See [Which gun you need](#which-gun-you-need) below.
+> Beta. Works only on the boards listed below, in **controller port 2**, and needs a **third-party light gun** such as the Tomee Zapp Gun - an original Nintendo Zapper will not work on a flat panel unmodified. See [Which gun you need](#which-gun-you-need) below.
 
-PCB design **v2.1 and later** (so also the current v2.6) route the two extra data lines of NES controller port 2 to the Pico: **D3 → GPIO27** (light sensor) and **D4 → GPIO28** (trigger). The emulator reads those two lines directly into bits 3 and 4 of `$4017`, exactly as a real NES does. Flash one of the **piconesPlus_AdafruitDVISD_*** binaries (the PCB firmware); on all other boards GPIO27 and GPIO28 are already in use for something else, so Zapper support is not compiled in there.
+The Zapper uses two extra data lines of NES controller port 2: **D3** (light sensor) and **D4** (trigger). The emulator reads those two lines directly into bits 3 and 4 of `$4017`, exactly as a real NES does. These boards connect them:
+
+| Board | D3 (light sensor) | D4 (trigger) |
+|:--|:--|:--|
+| [PicoNES PCB](#pcb-with-raspberry-pi-pico-or-pico-2-and-pimoroni-pico-plus-2) v2.1 and later with NES controller ports, including the current v2.6. Flash one of the **piconesPlus_AdafruitDVISD_*** binaries. | GPIO 27 | GPIO 28 |
+| [PCB with Waveshare RP2350-PiZero](#pcb-with-waveshare-rp2350-pizero) | GPIO 26 | GPIO 27 |
+| [Pico Computer 3](#pico-computer-3), on the I/O header | GPIO 6 | GPIO 7 |
+
+On all other boards these GPIOs are in use for something else or not connected, so Zapper support is not compiled in there.
 
 No setting has to be enabled. The gun is detected automatically the moment it is plugged in, because a Zapper actively drives its trigger line low while the trigger is released. A regular NES or SNES controller can stay in port 2 alongside the gun and keeps working - only bits 3 and 4 of `$4017` come from the Zapper, the pad's own data line is untouched.
 
@@ -960,6 +972,23 @@ Flash **[piconesPlus_WaveShare2350USBA_arm_piousb.uf2](https://github.com/PicoPl
 
 <img src="https://github.com/user-attachments/assets/1d6051f2-1393-40e1-aad0-e39ffb7717a0" width="480" alt="PicoNES Micro in its 3D-printed case">
 
+### PCB with Waveshare RP2350-PiZero
+
+This PCB, designed by Liu Szuping ([szuping](https://github.com/szuping)), carries a [Waveshare RP2350-PiZero](https://www.waveshare.com/rp2350-pizero.htm) and adds an HDMI port, an audio jack, NES and SNES controller ports and a socket for an ESP32 module.
+
+> [!NOTE]
+> The PCB design is not yet available.
+
+Flash **[piconesPlus_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2)** from the [releases page](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest). The binary for the RP2350-PiZero on its own does not work on this PCB.
+
+- **Video:** through the HDMI port on the PCB. The mini HDMI port of the RP2350-PiZero is not used.
+- **Sound:** through HDMI, or through the audio jack with **External Audio** in the settings menu.
+- **USB:** a USB controller or USB keyboard on the PIO-USB port of the RP2350-PiZero.
+- **NES or SNES controllers:** up to two, in the controller ports of the PCB.
+- **Bluetooth controllers:** with an ESP32 module running [BlueRetro](https://github.com/darthcloud/blueretro) in the socket, Bluetooth controllers are used instead of the controller ports. BlueRetro is set up with its [configuration tool](https://darthcloud.github.io/BlueRetroWebCfg_Beta/). Remove the ESP32 module to use the controller ports.
+- **NES Zapper:** light sensor (D3) on GPIO 26 and trigger (D4) on GPIO 27. Games see it as a Zapper in controller port 2. See [NES Zapper (light gun)](#nes-zapper-light-gun) for the gun and the game patches it needs.
+- **PSRAM:** the optional PSRAM chip of the RP2350-PiZero is supported. Boards that combine PSRAM with a non-Winbond flash chip need a one-time fix first, see [PSRAM with a non-Winbond flash chip](#psram-with-a-non-winbond-flash-chip).
+
 ***
 
 ## Olimex RP2040-PICO-PC
@@ -988,7 +1017,7 @@ Design files, schematics and parts lists: https://github.com/UKTailwind/Pico-Com
 
 Flash **[piconesPlus_PicoComputer3_arm.uf2](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest/download/piconesPlus_PicoComputer3_arm.uf2)** from the [releases page](https://github.com/PicoPlus-devel/pico-infonesPlus/releases/latest).
 
-- **Sound:** through the audio jack.
+- **Sound:** through HDMI, or through the audio jack with **External Audio** in the settings menu.
 - **USB:** USB controllers or a USB keyboard on the USB-A ports.
 - **NES or SNES controllers:** up to two, on the external I/O header H4:
 
@@ -1101,7 +1130,7 @@ running. Not every entry is available on every board or in every situation.
 | Controller Test | Show a gamepad graphic that follows the controller you last pressed a button on, plus a list of connected input sources. Useful for checking wiring and button mappings. Hold SELECT + UP for 2 seconds to exit. |
 | Enter BOOTSEL Mode | Reboot into BOOTSEL so you can flash new firmware. |
 | USB Drive Mode | Show the SD card on a computer as a USB drive, so games can be added or removed without taking the card out. See [USB drive mode](#usb-drive-mode). Menu only, not available in-game. |
-| Return to emulator selection | Go back to the emulator picker. Only present in [pico-bootLoader](#running-under-pico-bootloader) builds. |
+| Return to boot loader | Go back to the emulator picker. Only present in [pico-bootLoader](#running-under-pico-bootloader) builds. |
 
 > [!NOTE]
 > Changes are only applied when you select **SAVE**. **CANCEL** discards them, **DEFAULT** restores the default values. Press SELECT to jump directly to **SAVE**.
@@ -1356,7 +1385,7 @@ Some displays need 5V connected to the HDMI breakout in order to work:
 
 # Running under pico-bootLoader
 
-Instead of flashing this emulator as the only application on your board, you can install it under [pico-bootLoader](https://github.com/fhoedemakers/pico-bootLoader). The bootloader turns an RP2350 board into a multi-system console: on power-on it shows a menu from which you pick an emulator or game, which is then launched straight from the SD card. Any reset or power cycle brings you back to that menu, so you no longer have to reconnect the board to a computer to switch systems.
+Instead of flashing this emulator as the only application on your board, you can install it under [pico-bootLoader](https://github.com/PicoPlus-devel/pico-bootLoader). The bootloader turns an RP2350 board into a multi-system console: on power-on it shows a menu from which you pick an emulator or game, which is then launched straight from the SD card. Any reset or power cycle brings you back to that menu, so you no longer have to reconnect the board to a computer to switch systems.
 
 Alongside this NES emulator, the bootloader can run the Game Boy, Sega Master System/Game Gear, Sega Mega Drive/Genesis, PC Engine, Philips Videopac emulators and a native Doom port.
 
@@ -1424,6 +1453,7 @@ Options:
      14: Adafruit Feather RP2350 with TLV320DAC3100 I2S DAC and sdcard breakout board and PIO USB.
      15: Olimex RP2040-PICO-PC with a Pico 2 (rp2350 only)
      17: Pico Computer 3 (PC3): HSTX video, I2S audio, USB hub (rp2350 only)
+     18: Waveshare RP2350-PiZero on a PCB designed by Liu Szuping: HSTX video, I2S audio, BlueRetro - PIO USB enabled, -u implied.
   -m: Run cmake only, do not build the project
   -e: use the pico-extras based I2S audio driver (default: legacy custom driver)
   -h: display this help
@@ -1516,6 +1546,8 @@ PSRAM: [AndrewCapon](https://github.com/AndrewCapon/PicoPlusPsram)
 lwmem: [MaJerle](https://github.com/MaJerle/lwmem)
 
 Audio feedback and fixes: [szuping](https://github.com/szuping)
+
+PCB design for the Waveshare RP2350-PiZero by Liu Szuping ([szuping](https://github.com/szuping)).
 
 NES color palettes: [FirebrandX](https://www.firebrandx.com/nespalette.html), added to the emulator by [szuping](https://github.com/szuping). Wavebeam palette by Nakedarthur. Bubbles palette by [dragonkn9](https://github.com/dragonkn9)
 
