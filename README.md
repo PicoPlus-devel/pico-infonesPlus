@@ -989,6 +989,10 @@ Flash **[piconesPlus_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2](https://github.
 - **NES Zapper:** light sensor (D3) on GPIO 26 and trigger (D4) on GPIO 27. Games see it as a Zapper in controller port 2. See [NES Zapper (light gun)](#nes-zapper-light-gun) for the gun and the game patches it needs.
 - **PSRAM:** the optional PSRAM chip of the RP2350-PiZero is supported. Boards that combine PSRAM with a non-Winbond flash chip need a one-time fix first, see [PSRAM with a non-Winbond flash chip](#psram-with-a-non-winbond-flash-chip).
 
+| <img src="assets/WaveShareRP2350PiZeroLiuPCB_top.jpg" width="380" alt="The PCB seen from above, with the RP2350-PiZero, the ESP32 module, two NES and two SNES controller ports"> | <img src="assets/WaveShareRP2350PiZeroLiuPCB_inuse.jpg" width="380" alt="The PCB in use, with a DualShock 4 controller"> |
+|:--:|:--:|
+| <img src="assets/WaveShareRP2350PiZeroLiuPCB_side.jpg" width="380" alt="The PCB seen from the side"> | <img src="assets/WaveShareRP2350PiZeroLiuPCB_front.jpg" width="380" alt="The front of the PCB, with its HDMI port below the RP2350-PiZero"> |
+
 ***
 
 ## Olimex RP2040-PICO-PC
