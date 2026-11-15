@@ -906,7 +906,7 @@ The Zapper uses two extra data lines of NES controller port 2: **D3** (light sen
 |:--|:--|:--|
 | [PicoNES PCB](#pcb-with-raspberry-pi-pico-or-pico-2-and-pimoroni-pico-plus-2) v2.1 and later with NES controller ports, including the current v2.6. Flash one of the **piconesPlus_AdafruitDVISD_*** binaries. | GPIO 27 | GPIO 28 |
 | [PCB with Waveshare RP2350-PiZero](#pcb-with-waveshare-rp2350-pizero) | GPIO 26 | GPIO 27 |
-| [Pico Computer 3](#pico-computer-3), on the I/O header | GPIO 6 | GPIO 7 |
+| [Pico Computer 3](#pico-computer-3), on the I/O header | GPIO 34 | GPIO 35 |
 
 On all other boards these GPIOs are in use for something else or not connected, so Zapper support is not compiled in there.
 
@@ -1027,10 +1027,12 @@ Flash **[piconesPlus_PicoComputer3_arm.uf2](https://github.com/PicoPlus-devel/pi
 
   | | Clock | Latch | Data |
   |:--|:--|:--|:--|
-  | Port 1 | GPIO 0 | GPIO 1 | GPIO 2 |
-  | Port 2 | GPIO 3 | GPIO 4 | GPIO 5 |
+  | Port 1 | GPIO 4 | GPIO 5 | GPIO 6 |
+  | Port 2 | GPIO 4 | GPIO 5 | GPIO 7 |
 
-- **NES Zapper:** light sensor (D3) on GPIO 6 and trigger (D4) on GPIO 7. Games see it as a Zapper in controller port 2. See [NES Zapper (light gun)](#nes-zapper-light-gun) for the gun and the game patches it needs.
+  Both ports share the clock and latch lines.
+
+- **NES Zapper:** light sensor (D3) on GPIO 34 and trigger (D4) on GPIO 35. Games see it as a Zapper in controller port 2. See [NES Zapper (light gun)](#nes-zapper-light-gun) for the gun and the game patches it needs.
 - **Wii Classic controller:** on I2C0, SDA on GPIO 20 and SCL on GPIO 21.
 - **PSRAM:** fitted on the board. Games are loaded from the SD card into PSRAM.
 - **LED:** the heartbeat LED on GPIO 25 is used when jumper H5 is set to 1-2.

@@ -30,6 +30,10 @@ See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel
 
 - Boards with HSTX video: with **Display Mode** set to DVI, now and then a single line could be shown shifted to the right for one frame.
 
+## Changes
+
+- **Pico Computer 3** (updated 15 November 2026): the NES and SNES controllers and the NES Zapper on the I/O header moved to other pins. See [Pico Computer 3](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-computer-3) for the new pins, and download `piconesPlus_PicoComputer3_arm.uf2` again.
+
 # v0.56
 
 ## New
