@@ -20,6 +20,12 @@ Keep in mind that `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then 
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
+# Next release
+
+## Changes
+
+- Built with Pico SDK 2.3.1. This leaves a little more memory free for games, about 0.4 KB.
+
 # v0.56.1
 
 ## New
