@@ -420,6 +420,18 @@ add_subdirectory(tusb_xinput xinput_host)
 
 target_link_options(${projectname} PRIVATE -Xlinker --print-memory-usage --data-sections)
 
+# Pico SDK 2.3 adds two small SRAM users that this emulator does not need; both
+# options are unknown to, and ignored by, older SDKs.
+#   PICO_THREAD_LOCAL_CORE1_REINITIALIZE=0: no __thread / thread_local variables
+#     exist here, so core 1 needs no TLS block of its own (saves 8 bytes on Arm).
+#   PICO_SYNC_EXCLUSIVE_ACCESS_EVENT_WORKAROUND=0: RP2350 mutex waits keep
+#     spinning as with SDK 2.2 instead of sleeping in __wfe; this only affects
+#     power use, and the workaround's RAM code costs 28 (Arm) / 72 (RISC-V) bytes.
+target_compile_definitions(${projectname} PRIVATE
+    PICO_THREAD_LOCAL_CORE1_REINITIALIZE=0
+    PICO_SYNC_EXCLUSIVE_ACCESS_EVENT_WORKAROUND=0
+)
+
 # Optional: relink this emulator to run from a bootloader-managed partition
 # (for use with pico_bootLoader). Off by default so standalone builds are
 # unchanged.
