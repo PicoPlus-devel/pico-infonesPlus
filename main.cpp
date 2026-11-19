@@ -28,6 +28,9 @@
 #include "InfoNES_NSF.h"
 #include "zapper.h"
 #include "nes_palettes.h"
+// pico-bootLoader attract mode may start this emulator with a random game from
+// here (bootloader builds only, see pico_shared/attract.h).
+FRENS_ATTRACT_DIRS("/roms/NES");
 #if EMBEDDED_NES_ROM
 extern "C" const unsigned char embedded_nes_rom[];
 extern "C" const unsigned int embedded_nes_rom_len;
