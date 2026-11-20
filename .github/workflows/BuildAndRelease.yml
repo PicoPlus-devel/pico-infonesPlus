@@ -9,6 +9,8 @@ on:
           - "v*.*-alpha"
           - "v*.*.*"
           - "v*.*"
+          # <release tag>_bl is a build for pico-bootLoader only: tagged, never released.
+          - "!v*_bl"
     workflow_dispatch:
   
     #     branches: [ main ]

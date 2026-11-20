@@ -20,7 +20,9 @@ Keep in mind that `FLASH_QE_SET_1.uf2` must not be applied twice (recovery then 
 
 See also [PSRAM with a non-Winbond flash chip](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) in the readme.
 
-# Next release
+# v0.56.1_bl
+
+This version is built for [pico-bootLoader](https://github.com/PicoPlus-devel/pico-bootLoader) only, and is included in its SD-card archive. It has no release of its own: without pico-bootLoader, keep using v0.56.1.
 
 ## New
 
